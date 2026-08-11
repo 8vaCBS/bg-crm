@@ -1,15 +1,10 @@
 const COMUNAS = {
-  'nunoa': '13120', 'nunoa': '13120',
-  'providencia': '13123',
-  'las condes': '13114',
-  'penalolen': '13121',
-  'santiago': '13101',
-  'vitacura': '13132',
-  'la reina': '13113',
-  'macul': '13118',
-  'san miguel': '13126',
-  'la florida': '13110',
-  'maipu': '13119',
+  'nunoa': '13120', 'providencia': '13123', 'las condes': '13114',
+  'penalolen': '13121', 'santiago': '13101', 'vitacura': '13132',
+  'la reina': '13113', 'macul': '13118', 'san miguel': '13126',
+  'la florida': '13110', 'maipu': '13119', 'huechuraba': '13108',
+  'independencia': '13109', 'recoleta': '13125', 'lo barnechea': '13116',
+  'estacion central': '13106',
 };
 
 function normalizar(str) {
@@ -29,39 +24,30 @@ export function parsearDireccion(texto) {
   };
 }
 
-export async function buscarEnSII(calle, numero, codigoComuna) {
+export async function buscarEnSII(calle, numero, comuna) {
   try {
-    const siiUrl = 'https://zeus.sii.cl/avalu_cgi/br/brc200.sh?CODIGO_COMUNA=' + codigoComuna + '&NOMBRE_CALLE=' + encodeURIComponent(calle.toUpperCase()) + '&NUMERO_CALLE=' + numero + '&TIPO_BIEN_RAIZ=TODOS&BOTON=Buscar';
-    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(siiUrl);
-    const res = await fetch(proxy);
+    const params = new URLSearchParams({ calle, numero: numero || '', comuna });
+    const res = await fetch(`/api/buscar-rol?${params}`);
     const data = await res.json();
-    if (!data.contents) return null;
-    const html = data.contents;
-    const rolMatches = [...html.matchAll(/(\d{3,7})-(\d{1,4})/g)];
-    const roles = rolMatches.map(m => m[0]).filter(r => parseInt(r.split('-')[0]) > 100);
-    const avaluoMatch = html.match(/\$\s*([\d\.]+)/);
-    const avaluo = avaluoMatch ? parseInt(avaluoMatch[1].replace(/\./g, '')) : null;
-    return { rol: roles[0] || null, avaluoFiscal: avaluo };
-  } catch(e) { return null; }
+    if (data.error && !data.rol) return null;
+    return {
+      rol: data.rol || null,
+      avaluoFiscal: data.avaluoFiscal || null,
+      direccionSII: data.direccionSII || null,
+    };
+  } catch(e) {
+    console.error('Error SII:', e);
+    return null;
+  }
 }
 
 export async function buscarArriendos(comuna) {
   try {
-    const slug = normalizar(comuna).replace(/\s+/g, '-');
-    const url = 'https://www.portalinmobiliario.com/arriendo/casas/' + slug;
-    const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
-    const res = await fetch(proxy);
+    const res = await fetch(`/api/arriendos?comuna=${encodeURIComponent(comuna)}`);
     const data = await res.json();
-    if (!data.contents) return null;
-    const precios = [];
-    const re = /UF\s*([\d.,]+)/g;
-    let m;
-    while ((m = re.exec(data.contents)) !== null) {
-      const v = parseFloat(m[1].replace(/\./g, '').replace(',', '.'));
-      if (v > 5 && v < 200) precios.push(v);
-    }
-    if (!precios.length) return null;
-    const prom = precios.reduce((a,b) => a+b, 0) / precios.length;
-    return { promedio: Math.round(prom*10)/10, min: Math.round(Math.min(...precios)*10)/10, max: Math.round(Math.max(...precios)*10)/10, muestras: precios.length };
-  } catch(e) { return null; }
+    if (data.error || !data.promedio) return null;
+    return data;
+  } catch(e) {
+    return null;
+  }
 }

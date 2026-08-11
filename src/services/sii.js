@@ -36,15 +36,3 @@ export async function buscarEnSII(calle, numero, comuna) {
     return null;
   }
 }
-
-export async function buscarArriendos(comuna, destino) {
-  try {
-    const tipo = destino && destino.toLowerCase().includes('departamento') ? 'departamento' : 'casa';
-    const res = await fetch(`/api/arriendos?comuna=${encodeURIComponent(comuna)}&tipo=${tipo}`);
-    const data = await res.json();
-    if (data.error || !data.promedio) return null;
-    return data;
-  } catch(e) {
-    return null;
-  }
-}

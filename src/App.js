@@ -1,3 +1,47 @@
+
+const REPORTES_MERCADO = [
+  {
+    fuente: 'Portal Inmobiliario',
+    titulo: 'Informe Trimestral Mercado Residencial Santiago',
+    resumen: 'Precios de venta y arriendo por comuna, variación trimestral, oferta disponible y tiempo promedio de venta. Datos de más de 50.000 propiedades publicadas en el portal.',
+    url: 'https://www.portalinmobiliario.com/novedades/informes',
+    color: '#2563EB',
+    frecuencia: 'Trimestral',
+  },
+  {
+    fuente: 'TocToc',
+    titulo: 'Reporte de Precios y Tendencias Inmobiliarias',
+    resumen: 'Análisis de precios UF/m² por sector, evolución de arriendos y ventas en Santiago. Incluye comparativa entre comunas y proyección de mercado.',
+    url: 'https://www.toctoc.com/blog/estadisticas-mercado-inmobiliario',
+    color: '#7C3AED',
+    frecuencia: 'Trimestral',
+  },
+  {
+    fuente: 'Cámara Chilena de la Construcción',
+    titulo: 'Informe MACh – Mercado de Activos y Construcción Habitacional',
+    resumen: 'Estadísticas oficiales de permisos de edificación, venta de viviendas nuevas y usadas, tasas hipotecarias y proyecciones del sector para Santiago y regiones.',
+    url: 'https://www.cchc.cl/centro-de-informacion/informes/mach',
+    color: '#059669',
+    frecuencia: 'Trimestral',
+  },
+  {
+    fuente: 'SII – Servicio de Impuestos Internos',
+    titulo: 'Estadísticas de Bienes Raíces y Transacciones',
+    resumen: 'Datos oficiales de ventas efectivas registradas en el Conservador de Bienes Raíces. Precios reales de transacción (no de oferta) por comuna y tipo de propiedad.',
+    url: 'https://www.sii.cl/estadisticas/bienes_raices.htm',
+    color: '#D97706',
+    frecuencia: 'Anual',
+  },
+  {
+    fuente: 'Banco Central de Chile',
+    titulo: 'Índice de Precios de Vivienda (IPV)',
+    resumen: 'Evolución trimestral del precio de las viviendas en Chile. Mide cambios reales en el valor de casas y departamentos, separando el efecto de la UF.',
+    url: 'https://www.bcentral.cl/web/banco-central/areas/estadisticas/sector-inmobiliario',
+    color: '#DC2626',
+    frecuencia: 'Trimestral',
+  },
+];
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { getPropiedades, addPropiedad, updatePropiedad, deletePropiedad } from './services/firebase';
 import { parsearDireccion, buscarEnSII } from './services/sii';
@@ -224,6 +268,45 @@ export default function App() {
           </div>
         )}
       </main>
+
+        {/* ── MERCADO ── */}
+        {tab === 'mercado' && (
+          <div>
+            <h2 style={S.h2}>Mercado Inmobiliario</h2>
+            <p style={{ color: '#6B7280', fontSize: 13, marginBottom: 20 }}>
+              Reportes trimestrales de fuentes oficiales. Actualízate antes de contactar propietarios.
+            </p>
+
+            {REPORTES_MERCADO.map((r, i) => (
+              <a key={i} href={r.url} target="_blank" rel="noopener noreferrer"
+                style={{ textDecoration: 'none', display: 'block', marginBottom: 12 }}>
+                <div style={{
+                  background: 'white', border: '1px solid #E5E7EB',
+                  borderLeft: `4px solid ${r.color}`,
+                  borderRadius: 10, padding: '14px 16px',
+                  transition: 'box-shadow 0.15s',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#111827' }}>{r.fuente}</div>
+                    <span style={{ fontSize: 11, background: '#F3F4F6', padding: '2px 8px', borderRadius: 20, color: '#6B7280', whiteSpace: 'nowrap' }}>
+                      {r.frecuencia}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#374151', fontWeight: 600, marginBottom: 4 }}>{r.titulo}</div>
+                  <div style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.5, marginBottom: 10 }}>{r.resumen}</div>
+                  <div style={{ fontSize: 12, color: r.color, fontWeight: 600 }}>Ver reporte completo →</div>
+                </div>
+              </a>
+            ))}
+
+            <div style={{ marginTop: 24, padding: '14px 16px', background: '#F0FDF4', borderRadius: 10, border: '1px solid #A7F3D0' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#065F46', marginBottom: 4 }}>💡 Tip para Bárbara</div>
+              <div style={{ fontSize: 12, color: '#065F46' }}>
+                Revisa estos reportes al inicio de cada trimestre. Los datos de precio/m² y tendencias te ayudan a negociar mejor con los propietarios.
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* ── MODAL DETALLE ── */}
       {selected && (

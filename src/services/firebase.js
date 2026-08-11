@@ -1,0 +1,33 @@
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA_cRP05Wj1ePP64zd5dQur_aSarmfA-_A",
+  authDomain: "bg-inmobiliaria-6072d.firebaseapp.com",
+  projectId: "bg-inmobiliaria-6072d",
+  storageBucket: "bg-inmobiliaria-6072d.firebasestorage.app",
+  messagingSenderId: "914685474611",
+  appId: "1:914685474611:web:38900a6a60de13128cf046"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+export async function getPropiedades() {
+  const q = query(collection(db, 'propiedades'), orderBy('creadoEn', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
+export async function addPropiedad(data) {
+  const ref = await addDoc(collection(db, 'propiedades'), { ...data, status: 'nuevo', creadoEn: serverTimestamp() });
+  return ref.id;
+}
+
+export async function updatePropiedad(id, data) {
+  await updateDoc(doc(db, 'propiedades', id), { ...data, actualizadoEn: serverTimestamp() });
+}
+
+export async function deletePropiedad(id) {
+  await deleteDoc(doc(db, 'propiedades', id));
+}

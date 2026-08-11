@@ -61,18 +61,22 @@ export default function App() {
 
       setLog(prev => [...prev, { texto, estado: 'buscando', msg: 'Buscando en SII...' }]);
 
-      const [sii, arriendos] = await Promise.all([
-        buscarEnSII(calle, numero, codigoComuna),
-        buscarArriendos(comuna)
-      ]);
+      const sii = await buscarEnSII(calle, numero, codigoComuna);
+      const arriendos = await buscarArriendos(comuna, sii?.destino);
 
       const data = {
         direccion: texto,
         calle, numero, comuna,
-        rol:           sii?.rol          || null,
-        avaluoFiscal:  sii?.avaluoFiscal || null,
-        propietario:   sii?.propietario  || null,
-        arriendos:     arriendos         || null,
+        rol:           sii?.rol            || null,
+        avaluoFiscal:  sii?.avaluoFiscal   || null,
+        avaluoAfecto:  sii?.avaluoAfecto   || null,
+        direccionSII:  sii?.direccionSII   || null,
+        destino:       sii?.destino        || null,
+        supTerreno:    sii?.supTerreno     || null,
+        supConstruida: sii?.supConstruida  || null,
+        ubicacion:     sii?.ubicacion      || null,
+        periodo:       sii?.periodo        || null,
+        arriendos:     arriendos           || null,
       };
 
       try {
@@ -232,14 +236,20 @@ export default function App() {
             </div>
 
             <div style={S.modalBody}>
-              <Row label="ROL"         value={selected.rol} />
-              <Row label="Propietario" value={selected.propietario} />
-              <Row label="Avalúo SII"  value={clp(selected.avaluoFiscal)} />
-              <Row label="Comuna"      value={selected.comuna} />
+              <Row label="ROL"              value={selected.rol} />
+              <Row label="Dirección SII"    value={selected.direccionSII} />
+              <Row label="Comuna"           value={selected.comuna} />
+              <Row label="Destino"          value={selected.destino} />
+              <Row label="Ubicación"        value={selected.ubicacion} />
+              <Row label="Sup. Terreno"     value={selected.supTerreno ? `${selected.supTerreno} m²` : null} />
+              <Row label="Sup. Construida"  value={selected.supConstruida ? `${selected.supConstruida} m²` : null} />
+              <Row label="Avalúo Total"     value={clp(selected.avaluoFiscal)} />
+              <Row label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
+              <Row label="Período"          value={selected.periodo} />
               {selected.arriendos && <>
-                <Row label="Arriendo promedio" value={`${selected.arriendos.promedio} UF`} />
+                <Row label="Arriendo estimado" value={`${selected.arriendos.promedio} UF/mes`} />
                 <Row label="Rango arriendo"    value={`${selected.arriendos.min} – ${selected.arriendos.max} UF`} />
-                <Row label="Muestras"          value={`${selected.arriendos.muestras} propiedades`} />
+                <Row label="Muestras"          value={`${selected.arriendos.muestras} propiedades (${selected.arriendos.fuente || ''})`} />
               </>}
 
               <div style={{ marginTop: 20 }}>
@@ -294,9 +304,10 @@ function PropCard({ prop, onOpen, onStatus }) {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
         {prop.rol && <Tag color="#EFF6FF" text={`ROL: ${prop.rol}`} />}
-        {prop.propietario && <Tag color="#F9FAFB" text={`👤 ${prop.propietario}`} />}
-        {prop.avaluoFiscal && <Tag color="#F0FDF4" text={`${clp(prop.avaluoFiscal)}`} />}
-        {prop.arriendos && <Tag color="#FEF3C7" text={`~${prop.arriendos.promedio} UF arriendo`} />}
+        {prop.destino && <Tag color="#F3F4F6" text={prop.destino} />}
+        {prop.supConstruida && <Tag color="#F0FDF4" text={`${prop.supConstruida} m²`} />}
+        {prop.avaluoFiscal && <Tag color="#ECFDF5" text={clp(prop.avaluoFiscal)} />}
+        {prop.arriendos && <Tag color="#FEF3C7" text={`~${prop.arriendos.promedio} UF/mes`} />}
         {necesitaSeguimiento && <Tag color="#FEF3C7" text="⚠️ Seguimiento" />}
       </div>
     </div>

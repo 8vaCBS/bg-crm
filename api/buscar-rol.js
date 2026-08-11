@@ -94,11 +94,10 @@ module.exports = async function handler(req, res) {
     if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
 
     const predio = predios[0];
-    const rol = predio.rol || null;
     const manzana = predio.manzana;
     const predioNum = predio.predio;
 
-    // Paso 3: Obtener avalúo fiscal con getPredioNacional
+    // Paso 3: Obtener datos completos con getPredioNacional
     const r2 = await fetchPost('www4.sii.cl',
       '/mapasui/services/data/mapasFacadeService/getPredioNacional',
       {
@@ -108,27 +107,39 @@ module.exports = async function handler(req, res) {
     );
 
     const j2 = JSON.parse(r2.body);
-    const datos = j2?.data?.predioNacional || j2?.data || {};
+    const d = j2?.data || {};
 
-    const avaluoTotal = datos.valorTotal || datos.avaluoTotal || datos.catastroValorizado?.avaluoTotal || null;
-    const avaluoAfecto = datos.valorAfecto || datos.avaluoAfecto || null;
-    const destino = datos.destinoDescripcion || predio.destinoDescripcion || null;
-    const direccionSII = datos.direccion || predio.direccion || null;
-    const ubicacion = datos.ubicacionDescripcion || predio.ubicacion || null;
-    const areaHomogenea = datos.areaHomogenea || null;
+    // Paso 4: Obtener superficie con getServicioPredio
+    const r3 = await fetchPost('www4.sii.cl',
+      '/mapasui/services/data/mapasFacadeService/getServicioPredio',
+      {
+        metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getServicioPredio", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+        data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
+      }, baseHdrs
+    );
+
+    let supTerreno = null;
+    let supConstruida = null;
+    try {
+      const j3 = JSON.parse(r3.body);
+      const servicios = j3?.data?.servicios || j3?.data || {};
+      supTerreno = servicios.supTerreno || d.supTerreno || null;
+      supConstruida = servicios.supConsMt2 || servicios.supConstruida || d.supConsMt2 || null;
+    } catch(e) {}
 
     return res.status(200).json({
-      rol,
+      rol: d.rol || predio.rol || null,
       todosRoles: predios.map(p => p.rol).filter(Boolean),
-      avaluoFiscal: avaluoTotal,
-      avaluoAfecto,
-      direccionSII: direccionSII?.trim(),
-      destino,
-      ubicacion,
-      areaHomogenea,
+      avaluoFiscal: d.valorTotal || null,
+      avaluoAfecto: d.valorAfecto || null,
+      direccionSII: (d.direccion || predio.direccion || '').trim(),
+      destino: d.destinoDescripcion || predio.destinoDescripcion || null,
+      ubicacion: d.ubicacion || null,
+      supTerreno,
+      supConstruida,
+      periodo: d.periodo || null,
       manzana,
       predio: predioNum,
-      rawAvaluo: JSON.stringify(j2?.data).substring(0, 500),
     });
 
   } catch(e) {

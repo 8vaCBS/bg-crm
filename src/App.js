@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getPropiedades, addPropiedad, updatePropiedad, deletePropiedad } from './services/firebase';
-import { parsearDireccion, buscarEnSII, buscarArriendos } from './services/sii';
+import { parsearDireccion, buscarEnSII } from './services/sii';
 
 const ESTADOS = [
   { key: 'nuevo',          label: 'Nuevo',          color: '#6B7280' },
@@ -62,7 +62,6 @@ export default function App() {
       setLog(prev => [...prev, { texto, estado: 'buscando', msg: 'Buscando en SII...' }]);
 
       const sii = await buscarEnSII(calle, numero, codigoComuna);
-      const arriendos = await buscarArriendos(comuna, sii?.destino);
 
       const data = {
         direccion: texto,
@@ -76,7 +75,7 @@ export default function App() {
         supConstruida: sii?.supConstruida  || null,
         ubicacion:     sii?.ubicacion      || null,
         periodo:       sii?.periodo        || null,
-        arriendos:     arriendos           || null,
+        arriendoUF:    null,
       };
 
       try {
@@ -246,11 +245,11 @@ export default function App() {
               <Row label="Avalúo Total"     value={clp(selected.avaluoFiscal)} />
               <Row label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
               <Row label="Período"          value={selected.periodo} />
-              {selected.arriendos && <>
-                <Row label="Arriendo estimado" value={`${selected.arriendos.promedio} UF/mes`} />
-                <Row label="Rango arriendo"    value={`${selected.arriendos.min} – ${selected.arriendos.max} UF`} />
-                <Row label="Muestras"          value={`${selected.arriendos.muestras} propiedades (${selected.arriendos.fuente || ''})`} />
-              </>}
+              <ArriendoEditor prop={selected} onSave={(uf) => {
+                actualizarPropiedad(selected.id, { arriendoUF: uf });
+                setSelected({...selected, arriendoUF: uf});
+                cargarPropiedades();
+              }} />
 
               <div style={{ marginTop: 20 }}>
                 <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>ESTADO</div>
@@ -307,7 +306,7 @@ function PropCard({ prop, onOpen, onStatus }) {
         {prop.destino && <Tag color="#F3F4F6" text={prop.destino} />}
         {prop.supConstruida && <Tag color="#F0FDF4" text={`${prop.supConstruida} m²`} />}
         {prop.avaluoFiscal && <Tag color="#ECFDF5" text={clp(prop.avaluoFiscal)} />}
-        {prop.arriendos && <Tag color="#FEF3C7" text={`~${prop.arriendos.promedio} UF/mes`} />}
+        {prop.arriendoUF && <Tag color="#FEF3C7" text={`~${prop.arriendoUF} UF/mes`} />}
         {necesitaSeguimiento && <Tag color="#FEF3C7" text="⚠️ Seguimiento" />}
       </div>
     </div>

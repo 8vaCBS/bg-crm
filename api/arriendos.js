@@ -35,11 +35,10 @@ module.exports = async function handler(req, res) {
           status: r.statusCode,
           body: Buffer.concat(chunks).toString('utf8'),
           cookies: r.headers['set-cookie'] || [],
-          headers: r.headers,
         }));
       });
       req.on('error', reject);
-      req.setTimeout(12000, () => { req.destroy(); reject(new Error('timeout')); });
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')); });
     });
   }
 
@@ -62,9 +61,9 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Paso 1: Obtener cookie de sesión de TocToc
     const refererUrl = `https://www.toctoc.com/resultados/mapa/arriendo/${tipoProp}/?idPoligono=${idPoligono}&texto=${comunaNorm}`;
-    
+
+    // Paso 1: Obtener sesión y extraer X-Access-Token del HTML
     const sessionRes = await fetchGet(refererUrl, {
       'User-Agent': UA,
       'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
@@ -74,15 +73,41 @@ module.exports = async function handler(req, res) {
 
     const cookies = sessionRes.cookies.map(c => c.split(';')[0]).join('; ');
 
+    // Extraer X-Access-Token del HTML (está en el JS embebido)
+    let accessToken = '';
+    const tokenMatch = sessionRes.body.match(/["']?[Xx]-?[Aa]ccess-?[Tt]oken["']?\s*[:=]\s*["']([A-Za-z0-9._-]{20,})["']/);
+    if (tokenMatch) accessToken = tokenMatch[1];
+
+    // También buscar el token en formato JWT
+    if (!accessToken) {
+      const jwtMatch = sessionRes.body.match(/eyJ[A-Za-z0-9._-]{50,}/);
+      if (jwtMatch) accessToken = jwtMatch[0];
+    }
+
+    // Paso 2: Obtener token desde endpoint dedicado si existe
+    if (!accessToken) {
+      try {
+        const tokenRes = await fetchGet('https://www.toctoc.com/api/token', {
+          'User-Agent': UA, 'Cookie': cookies,
+          'Accept': 'application/json',
+          'Referer': refererUrl,
+        });
+        if (tokenRes.status === 200) {
+          const td = JSON.parse(tokenRes.body);
+          accessToken = td.token || td.access_token || td.Token || '';
+        }
+      } catch(e) {}
+    }
+
     if (debug === '1') {
       return res.status(200).json({
         sessionStatus: sessionRes.status,
-        cookiesObtained: cookies.substring(0, 200),
-        htmlLength: sessionRes.body.length,
+        cookiesLen: cookies.length,
+        accessToken: accessToken ? accessToken.substring(0, 50) + '...' : 'NOT FOUND',
+        htmlLen: sessionRes.body.length,
       });
     }
 
-    // Paso 2: Llamar GetProps con la cookie
     const payload = {
       region: '', comuna: '', barrio: '', poi: '',
       tipoVista: 'mapa', operacion: 2,
@@ -105,7 +130,7 @@ module.exports = async function handler(req, res) {
       primeraCarga: true, santander: false
     };
 
-    const r = await fetchPost('www.toctoc.com', '/api/mapa/GetProps', payload, {
+    const reqHdrs = {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'es-419,es;q=0.9',
       'Cache-Control': 'no-cache',
@@ -113,28 +138,26 @@ module.exports = async function handler(req, res) {
       'Origin': 'https://www.toctoc.com',
       'Referer': refererUrl,
       'User-Agent': UA,
-      'Pragma': 'no-cache',
       'Sec-Fetch-Dest': 'empty',
       'Sec-Fetch-Mode': 'cors',
       'Sec-Fetch-Site': 'same-origin',
-    });
+    };
+
+    if (accessToken) reqHdrs['X-Access-Token'] = accessToken;
+
+    const r = await fetchPost('www.toctoc.com', '/api/mapa/GetProps', payload, reqHdrs);
 
     if (r.status !== 200 || !r.body) {
-      return res.status(200).json({ error: `TocToc status ${r.status}`, bodyLen: r.body.length });
+      return res.status(200).json({ error: `TocToc status ${r.status}`, hasToken: !!accessToken });
     }
 
     const data = JSON.parse(r.body);
     const props = data.propiedades || data.Propiedades || data.items || data.results || [];
 
     if (!props.length) {
-      return res.status(200).json({
-        error: 'Sin propiedades',
-        keys: Object.keys(data).slice(0, 10),
-        total: data.total || data.Total || 0,
-      });
+      return res.status(200).json({ error: 'Sin propiedades', keys: Object.keys(data).slice(0, 10) });
     }
 
-    // Extraer precios UF
     const precios = props
       .map(p => p.precio || p.Precio || 0)
       .filter(v => v >= 5 && v <= 500);
@@ -142,8 +165,7 @@ module.exports = async function handler(req, res) {
     if (precios.length < 3) {
       return res.status(200).json({
         error: 'Pocos precios UF',
-        total: props.length,
-        sample: props.slice(0, 2).map(p => ({ precio: p.precio, moneda: p.moneda, idMoneda: p.idMoneda })),
+        sample: props.slice(0, 2).map(p => ({ precio: p.precio, moneda: p.moneda })),
       });
     }
 

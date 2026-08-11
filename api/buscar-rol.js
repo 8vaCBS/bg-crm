@@ -24,79 +24,85 @@ module.exports = async function handler(req, res) {
   const codigoComuna = COMUNAS[normalizar(comuna)] || '13120';
   const calleUpper = calle.toUpperCase();
 
-  // Intentar múltiples variaciones de la URL del SII
-  const urls = [
-    `https://zeus.sii.cl/avalu_cgi/br/brc200.sh?CODIGO_COMUNA=${codigoComuna}&NOMBRE_CALLE=${encodeURIComponent(calleUpper)}&NUMERO_CALLE=${numero||''}&TIPO_BIEN_RAIZ=TODOS&BOTON=Buscar`,
-    `https://zeus.sii.cl/avalu_cgi/br/brc200.sh?CODIGO_COMUNA=${codigoComuna}&NOMBRE_CALLE=${encodeURIComponent(calleUpper)}&NUMERO_CALLE=&TIPO_BIEN_RAIZ=TODOS&BOTON=Buscar`,
-  ];
-
-  let html = '';
-  let usedUrl = '';
-
-  for (const url of urls) {
-    try {
-      html = await new Promise((resolve, reject) => {
-        const req = https.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'es-CL,es;q=0.9,en;q=0.8',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Referer': 'https://zeus.sii.cl/avalu_cgi/br/brc100.sh',
-          }
-        }, (siiRes) => {
-          let data = Buffer.alloc(0);
-          siiRes.on('data', chunk => { data = Buffer.concat([data, chunk]); });
-          siiRes.on('end', () => resolve(data.toString('latin1')));
-        });
-        req.on('error', reject);
-        req.setTimeout(10000, () => { req.destroy(); reject(new Error('timeout')); });
+  async function fetchUrl(url, opts) {
+    return new Promise((resolve, reject) => {
+      const req = https.get(url, opts || {}, (r) => {
+        let chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => resolve(Buffer.concat(chunks).toString('latin1')));
       });
-      usedUrl = url;
-      if (html.length > 200) break;
-    } catch(e) {
-      html = '';
-    }
-  }
-
-  // Si debug=1, devolver HTML crudo
-  if (debug === '1') {
-    return res.status(200).json({
-      htmlLength: html.length,
-      htmlSample: html.substring(0, 2000),
-      codigoComuna,
-      calleUpper,
-      usedUrl
+      req.on('error', reject);
+      req.setTimeout(12000, () => { req.destroy(); reject(new Error('timeout')); });
     });
   }
 
-  // Patrones para extraer ROL del HTML del SII
-  // El SII muestra resultados como tabla con rol en formato XXXX-XX
-  const patrones = [
-    /rol[^\d]*(\d{3,7})-(\d{1,4})/gi,
-    /(\d{3,7})-(\d{1,4})/g,
+  const hdrs = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'es-CL,es;q=0.9',
+    'Referer': 'https://zeus.sii.cl/',
+  };
+
+  // URL correcta del SII para buscar por dirección
+  const siiUrl = `https://zeus.sii.cl/avalu_cgi/br/brcb02.sh?CODIGO_COMUNA=${codigoComuna}&NOMBRE_CALLE=${encodeURIComponent(calleUpper)}&NUMERO_CALLE=${numero||''}&TIPO_BIEN_RAIZ=TODOS&BOTON=Buscar`;
+
+  let html = '';
+  try {
+    html = await fetchUrl(siiUrl, { headers: hdrs });
+  } catch(e) {
+    // Fallback: roles.tremen.tech - explorador catastral público
+    try {
+      const tremenUrl = `https://roles.tremen.tech/api/predios?direccion=${encodeURIComponent(calle)}&comuna=${codigoComuna}`;
+      const r = await fetchUrl(tremenUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const data = JSON.parse(r);
+      if (data && data.length > 0) {
+        return res.status(200).json({
+          rol: data[0].rol || null,
+          avaluoFiscal: data[0].avaluo_fiscal || null,
+          direccionSII: data[0].direccion || null,
+        });
+      }
+    } catch(e2) {}
+    return res.status(500).json({ error: e.message });
+  }
+
+  if (debug === '1') {
+    return res.status(200).json({
+      htmlLength: html.length,
+      htmlSample: html.substring(0, 3000),
+      siiUrl
+    });
+  }
+
+  // El SII devuelve tabla con resultados
+  // Buscar patrón de ROL en el HTML
+  const rolPatterns = [
+    /NUMERO_ROL[^>]*>([^<]+)</gi,
+    /N[°oº]\s*Rol[^:]*:\s*([\d]+-[\d]+)/gi,
+    /rol[^"']*["']([\d]+-[\d]+)["']/gi,
+    /([\d]{3,7})-([\d]{1,4})/g,
   ];
 
   let roles = [];
-  for (const patron of patrones) {
-    const matches = [...html.matchAll(patron)];
-    roles = matches.map(m => {
-      const parts = m[0].match(/(\d{3,7})-(\d{1,4})/);
-      return parts ? parts[0] : null;
-    }).filter(r => r && parseInt(r.split('-')[0]) > 100);
-    if (roles.length > 0) break;
+  for (const pat of rolPatterns) {
+    const matches = [...html.matchAll(pat)];
+    const found = matches
+      .map(m => {
+        const full = m[0].match(/([\d]{3,7})-([\d]{1,4})/);
+        return full ? full[0] : null;
+      })
+      .filter(r => r && parseInt(r.split('-')[0]) > 100);
+    if (found.length > 0) { roles = found; break; }
   }
 
-  const avaluoMatch = html.match(/[\$]\s*([\d\.]+)/);
+  const avaluoMatch = html.match(/\$\s*([\d\.]+)/);
   const avaluo = avaluoMatch ? parseInt(avaluoMatch[1].replace(/\./g,'')) : null;
 
   return res.status(200).json({
     rol: roles[0] || null,
     todosRoles: roles.slice(0,5),
     avaluoFiscal: avaluo,
-    codigoComuna,
     htmlLength: html.length,
-    error: roles.length === 0 ? 'Sin resultados en SII' : null
+    error: roles.length === 0 ? 'Sin ROL encontrado' : null
   });
 };

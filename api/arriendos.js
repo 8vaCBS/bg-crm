@@ -1,104 +1,112 @@
 
+const https = require('https');
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { comuna, tipo } = req.query;
+  const { comuna, tipo, debug } = req.query;
   if (!comuna) return res.status(400).json({ error: 'Falta comuna' });
 
   function normalizar(str) {
     return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
 
-  // Valores de arriendo por comuna (UF/mes) - 2do Semestre 2026
-  // Casas y Departamentos separados
-  // Fuente: Reportes Portal Inmobiliario / TocToc
-  const ARRIENDOS = {
-    'nunoa': {
-      casa: { min: 18, promedio: 28, max: 55, muestras: 142 },
-      departamento: { min: 12, promedio: 18, max: 32, muestras: 389 },
-    },
-    'providencia': {
-      casa: { min: 22, promedio: 35, max: 70, muestras: 89 },
-      departamento: { min: 14, promedio: 22, max: 45, muestras: 512 },
-    },
-    'las condes': {
-      casa: { min: 28, promedio: 48, max: 120, muestras: 203 },
-      departamento: { min: 16, promedio: 26, max: 65, muestras: 634 },
-    },
-    'penalolen': {
-      casa: { min: 12, promedio: 20, max: 38, muestras: 98 },
-      departamento: { min: 9, promedio: 14, max: 22, muestras: 87 },
-    },
-    'santiago': {
-      casa: { min: 10, promedio: 18, max: 35, muestras: 167 },
-      departamento: { min: 8, promedio: 14, max: 28, muestras: 892 },
-    },
-    'vitacura': {
-      casa: { min: 35, promedio: 65, max: 180, muestras: 78 },
-      departamento: { min: 20, promedio: 35, max: 90, muestras: 123 },
-    },
-    'la reina': {
-      casa: { min: 20, promedio: 32, max: 65, muestras: 112 },
-      departamento: { min: 13, promedio: 20, max: 38, muestras: 145 },
-    },
-    'macul': {
-      casa: { min: 12, promedio: 18, max: 30, muestras: 76 },
-      departamento: { min: 8, promedio: 13, max: 20, muestras: 134 },
-    },
-    'la florida': {
-      casa: { min: 10, promedio: 16, max: 28, muestras: 189 },
-      departamento: { min: 7, promedio: 11, max: 18, muestras: 267 },
-    },
-    'maipu': {
-      casa: { min: 9, promedio: 14, max: 25, muestras: 234 },
-      departamento: { min: 6, promedio: 10, max: 16, muestras: 312 },
-    },
-    'lo barnechea': {
-      casa: { min: 25, promedio: 42, max: 100, muestras: 67 },
-      departamento: { min: 14, promedio: 22, max: 45, muestras: 89 },
-    },
-    'huechuraba': {
-      casa: { min: 12, promedio: 18, max: 32, muestras: 45 },
-      departamento: { min: 8, promedio: 13, max: 20, muestras: 78 },
-    },
-    'independencia': {
-      casa: { min: 10, promedio: 15, max: 25, muestras: 34 },
-      departamento: { min: 7, promedio: 12, max: 20, muestras: 145 },
-    },
-    'recoleta': {
-      casa: { min: 10, promedio: 15, max: 24, muestras: 43 },
-      departamento: { min: 7, promedio: 11, max: 18, muestras: 123 },
-    },
-    'estacion central': {
-      casa: { min: 9, promedio: 13, max: 22, muestras: 56 },
-      departamento: { min: 6, promedio: 10, max: 16, muestras: 187 },
-    },
-  };
-
-  const key = normalizar(comuna);
-  const tipoProp = tipo === 'departamento' ? 'departamento' : 'casa';
-  const data = ARRIENDOS[key];
-
-  if (!data) {
-    // Default para comunas no listadas
-    return res.status(200).json({
-      promedio: tipoProp === 'departamento' ? 14 : 20,
-      min: tipoProp === 'departamento' ? 8 : 12,
-      max: tipoProp === 'departamento' ? 25 : 40,
-      muestras: 50,
-      fuente: 'Referencia regional 2S 2026',
-      tipo: tipoProp,
-      nota: 'Valores estimados para esta comuna'
+  async function fetchUrl(url) {
+    return new Promise((resolve, reject) => {
+      const req = https.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,*/*;q=0.8',
+          'Accept-Language': 'es-CL,es;q=0.9',
+          'Accept-Encoding': 'identity',
+          'Cache-Control': 'no-cache',
+        }
+      }, (r) => {
+        if (r.statusCode >= 300 && r.statusCode < 400 && r.headers.location) {
+          return fetchUrl(r.headers.location).then(resolve).catch(reject);
+        }
+        let chunks = [];
+        r.on('data', c => chunks.push(c));
+        r.on('end', () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
+      });
+      req.on('error', reject);
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')); });
     });
   }
 
-  const valores = data[tipoProp];
+  const slug = normalizar(comuna).replace(/\s+/g, '-');
+  const tipoProp = tipo === 'departamento' ? 'departamento' : 'casa';
 
-  return res.status(200).json({
-    ...valores,
-    fuente: 'Portal Inmobiliario / TocToc - 2S 2026',
-    tipo: tipoProp,
-    comuna,
-  });
+  const urls = [
+    `https://www.toctoc.com/propiedades/arriendo/${tipoProp}/${slug}`,
+    `https://www.toctoc.com/propiedades/arriendo/${tipoProp}/${slug}-region-metropolitana`,
+    `https://www.toctoc.com/arriendo/${tipoProp}/${slug}`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const r = await fetchUrl(url);
+
+      if (debug === '1') {
+        return res.status(200).json({
+          url,
+          status: r.status,
+          htmlLength: r.body.length,
+          sample: r.body.substring(0, 1000),
+        });
+      }
+
+      if (r.status !== 200 || r.body.length < 500) continue;
+
+      const precios = [];
+
+      // Buscar en __NEXT_DATA__
+      const nextMatch = r.body.match(/<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+      if (nextMatch) {
+        try {
+          const nd = JSON.parse(nextMatch[1]);
+          const props = nd?.props?.pageProps;
+          const listings = props?.listings || props?.properties || props?.results || [];
+          listings.forEach(item => {
+            const price = item.price || item.valor || item.rent_price;
+            const currency = item.currency || item.moneda || '';
+            if (price && (currency === 'UF' || currency === 'CLF')) {
+              const v = parseFloat(price);
+              if (v >= 5 && v <= 500) precios.push(v);
+            }
+          });
+        } catch(e) {}
+      }
+
+      // Fallback regex UF
+      if (precios.length < 3) {
+        const re = /(\d{1,3}(?:[.,]\d{3})*)\s*UF/gi;
+        let m;
+        while ((m = re.exec(r.body)) !== null) {
+          const v = parseFloat(m[1].replace(/\./g,'').replace(',','.'));
+          if (v >= 5 && v <= 500) precios.push(v);
+        }
+      }
+
+      if (precios.length >= 3) {
+        precios.sort((a, b) => a - b);
+        const cut = Math.floor(precios.length * 0.1);
+        const filtrados = precios.slice(cut, precios.length - (cut || 1));
+        const prom = filtrados.reduce((a, b) => a + b, 0) / filtrados.length;
+
+        return res.status(200).json({
+          promedio: Math.round(prom * 10) / 10,
+          min: Math.round(filtrados[0] * 10) / 10,
+          max: Math.round(filtrados[filtrados.length - 1] * 10) / 10,
+          muestras: filtrados.length,
+          fuente: 'TocToc',
+          tipo: tipoProp,
+          url,
+        });
+      }
+    } catch(e) { continue; }
+  }
+
+  return res.status(200).json({ error: 'Sin datos de TocToc', muestras: 0 });
 };

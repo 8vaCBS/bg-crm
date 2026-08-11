@@ -137,6 +137,7 @@ module.exports = async function handler(req, res) {
       ubicacion: d.ubicacion || null,
       supTerreno,
       supConstruida,
+      rawServicio: r3 ? r3.body.substring(0, 500) : 'no r3',
       periodo: d.periodo || null,
       manzana,
       predio: predioNum,

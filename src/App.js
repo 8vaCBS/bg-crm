@@ -353,6 +353,41 @@ function Row({ label, value }) {
   );
 }
 
+function ArriendoEditor({ prop, onSave }) {
+  const [val, setVal] = useState(prop.arriendoUF || '');
+  const [saving, setSaving] = useState(false);
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #F3F4F6' }}>
+      <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 6 }}>ARRIENDO ESTIMADO (UF/mes)</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input
+          type="number"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          placeholder="ej: 25"
+          style={{ flex: 1, padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14 }}
+        />
+        <button
+          onClick={async () => {
+            if (!val) return;
+            setSaving(true);
+            await onSave(parseFloat(val));
+            setSaving(false);
+          }}
+          style={{ padding: '8px 16px', background: '#1E3A5F', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          {saving ? '...' : 'Guardar'}
+        </button>
+      </div>
+      {prop.arriendoUF && (
+        <div style={{ marginTop: 6, fontSize: 13, color: '#059669', fontWeight: 600 }}>
+          ✓ {prop.arriendoUF} UF/mes registrado
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── ESTILOS ───────────────────────────────────
 const S = {
   app: { minHeight: '100vh', background: '#F9FAFB', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', maxWidth: 480, margin: '0 auto' },

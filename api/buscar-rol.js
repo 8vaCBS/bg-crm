@@ -12,16 +12,14 @@ module.exports = async function handler(req, res) {
     return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
   }
 
+  const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
+
   async function fetchGet(url, hdrs) {
     return new Promise((resolve, reject) => {
       const req = https.get(url, { headers: hdrs || {} }, (r) => {
         let chunks = [];
         r.on('data', c => chunks.push(c));
-        r.on('end', () => resolve({
-          status: r.statusCode,
-          body: Buffer.concat(chunks).toString('utf8'),
-          cookies: r.headers['set-cookie'] || []
-        }));
+        r.on('end', () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString('utf8'), cookies: r.headers['set-cookie'] || [] }));
       });
       req.on('error', reject);
       req.setTimeout(12000, () => { req.destroy(); reject(new Error('timeout')); });
@@ -31,20 +29,12 @@ module.exports = async function handler(req, res) {
   async function fetchPost(hostname, path, payload, hdrs) {
     const body = JSON.stringify(payload);
     return new Promise((resolve, reject) => {
-      const req = https.request({
-        hostname, path, method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-          ...hdrs
-        }
+      const req = https.request({ hostname, path, method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), ...hdrs }
       }, (r) => {
         let chunks = [];
         r.on('data', c => chunks.push(c));
-        r.on('end', () => resolve({
-          status: r.statusCode,
-          body: Buffer.concat(chunks).toString('utf8')
-        }));
+        r.on('end', () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString('utf8') }));
       });
       req.on('error', reject);
       req.setTimeout(12000, () => { req.destroy(); reject(new Error('timeout')); });
@@ -67,72 +57,78 @@ module.exports = async function handler(req, res) {
   };
 
   const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
-  const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36';
 
   try {
-    // Paso 1: Obtener cookie de sesión
+    // Paso 1: Cookie de sesión
     const sessionRes = await fetchGet(
       'https://www4.sii.cl/mapasui/internet/index.html',
       { 'User-Agent': UA, 'Accept': 'text/html,*/*', 'Accept-Language': 'es-419,es;q=0.9' }
     );
     const cookies = sessionRes.cookies.map(c => c.split(';')[0]).join('; ');
 
-    // Paso 2: Buscar ROL
-    const payload = {
-      metaData: {
-        namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPrediosDireccion",
-        conversationId: "UNAUTHENTICATED-CALL",
-        transactionId: `bg-${Date.now()}`
-      },
-      data: {
-        rolDireccion: {
-          comuna: codigoComuna,
-          nombreComuna: comuna.toUpperCase(),
-          calle: calle,
-          numeroCalleStr: numero || '',
-          detalle: 0
-        },
-        servicios: []
-      }
+    const baseHdrs = {
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'es-419,es;q=0.9',
+      'Cache-Control': 'no-cache',
+      'Cookie': cookies,
+      'Origin': 'https://www4.sii.cl',
+      'Referer': 'https://www4.sii.cl/mapasui/internet/index.html',
+      'User-Agent': UA,
+      'Pragma': 'no-cache',
+      'Sec-Fetch-Dest': 'empty',
+      'Sec-Fetch-Mode': 'cors',
+      'Sec-Fetch-Site': 'same-origin',
     };
 
-    const searchRes = await fetchPost(
-      'www4.sii.cl',
+    // Paso 2: Buscar predios por dirección
+    const r1 = await fetchPost('www4.sii.cl',
       '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
-      payload,
       {
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'es-419,es;q=0.9',
-        'Cache-Control': 'no-cache',
-        'Cookie': cookies,
-        'Origin': 'https://www4.sii.cl',
-        'Referer': 'https://www4.sii.cl/mapasui/internet/index.html',
-        'User-Agent': UA,
-        'Pragma': 'no-cache',
-        'Sec-Fetch-Dest': 'empty',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Site': 'same-origin',
-      }
+        metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPrediosDireccion", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+        data: { rolDireccion: { comuna: codigoComuna, nombreComuna: comuna.toUpperCase(), calle, numeroCalleStr: numero || '', detalle: 0 }, servicios: [] }
+      }, baseHdrs
     );
 
-    const json = JSON.parse(searchRes.body);
-    const predios = json?.data || [];
-
-    if (!predios || predios.length === 0) {
-      return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
-    }
+    const j1 = JSON.parse(r1.body);
+    const predios = j1?.data || [];
+    if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
 
     const predio = predios[0];
+    const rol = predio.rol || null;
+    const manzana = predio.manzana;
+    const predioNum = predio.predio;
+
+    // Paso 3: Obtener avalúo fiscal con getPredioNacional
+    const r2 = await fetchPost('www4.sii.cl',
+      '/mapasui/services/data/mapasFacadeService/getPredioNacional',
+      {
+        metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioNacional", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+        data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
+      }, baseHdrs
+    );
+
+    const j2 = JSON.parse(r2.body);
+    const datos = j2?.data?.predioNacional || j2?.data || {};
+
+    const avaluoTotal = datos.valorTotal || datos.avaluoTotal || datos.catastroValorizado?.avaluoTotal || null;
+    const avaluoAfecto = datos.valorAfecto || datos.avaluoAfecto || null;
+    const destino = datos.destinoDescripcion || predio.destinoDescripcion || null;
+    const direccionSII = datos.direccion || predio.direccion || null;
+    const ubicacion = datos.ubicacionDescripcion || predio.ubicacion || null;
+    const areaHomogenea = datos.areaHomogenea || null;
 
     return res.status(200).json({
-      rol: predio.rol || null,
+      rol,
       todosRoles: predios.map(p => p.rol).filter(Boolean),
-      avaluoFiscal: predio.valorTotal || null,
-      direccionSII: predio.direccion?.trim() || null,
-      destino: predio.destinoDescripcion || null,
-      comuna: predio.nombreComuna || null,
-      manzana: predio.manzana || null,
-      predio: predio.predio || null,
+      avaluoFiscal: avaluoTotal,
+      avaluoAfecto,
+      direccionSII: direccionSII?.trim(),
+      destino,
+      ubicacion,
+      areaHomogenea,
+      manzana,
+      predio: predioNum,
+      rawAvaluo: JSON.stringify(j2?.data).substring(0, 500),
     });
 
   } catch(e) {

@@ -225,11 +225,16 @@ module.exports = async function handler(req, res) {
     const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
     const palabras = calle.trim().split(/\s+/);
 
-    // Variantes de calle: solo las esenciales para no saturar el timeout
+    // Variantes de calle: esenciales sin saturar el timeout
     const variantesCalle = [calle.trim()];
-    // Solo para nombres con 4+ palabras: probar sin las últimas (ej: "de la Plata")
+
+    // El SII no usa tildes ni caracteres especiales — normalizar siempre
+    const calleNorm = calle.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (calleNorm !== calle.trim()) variantesCalle.push(calleNorm);
+
+    // Para nombres con 4+ palabras: probar solo las primeras 2
     if (palabras.length >= 4) {
-      variantesCalle.push(palabras.slice(0, 2).join(' ')); // primeras 2 palabras
+      variantesCalle.push(palabras.slice(0, 2).join(' '));
     }
 
     // Variantes de número: solo agregar cero si el número tiene 3 dígitos o menos

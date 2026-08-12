@@ -166,9 +166,10 @@ export default function App() {
       {/* NAV */}
       <nav style={S.nav}>
         {[
-          { k: 'dashboard', l: 'Dashboard' },
+          { k: 'dashboard', l: 'Inicio' },
           { k: 'capturar',  l: 'Capturar'  },
-          { k: 'lista',     l: `Propiedades (${props.length})` },
+          { k: 'lista',     l: `Props (${props.length})` },
+          { k: 'mercado',   l: 'Mercado' },
         ].map(({ k, l }) => (
           <button key={k} style={{ ...S.navBtn, ...(tab === k ? S.navActive : {}) }}
             onClick={() => setTab(k)}>{l}</button>

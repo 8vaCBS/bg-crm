@@ -342,15 +342,17 @@ module.exports = async function handler(req, res) {
         const parsed = JSON.parse(r1.body);
         let resultado = parsed?.data || [];
 
-        // Filtro estricto de comuna: el SII puede devolver predios de otra
-        // comuna cuando hay calles con el mismo nombre en la RM
+        // Filtro de comuna: descartar predios de otra comuna
+        // pero primero loggear qué comunas vienen para debug
         if (resultado.length > 0) {
+          const comunasEnResultado = [...new Set(resultado.map(p => String(p.comuna)))];
+          console.log('[buscar-rol] variante:', variante, '| num:', num, '| comunas en resultado:', comunasEnResultado, '| esperada:', codigoComuna);
           const filtrados = resultado.filter(p => String(p.comuna) === String(codigoComuna));
           if (filtrados.length > 0) {
-            resultado = filtrados; // Solo predios de la comuna correcta
+            resultado = filtrados;
           } else {
             // Todos son de otra comuna -> descartar esta variante
-            console.log('[buscar-rol] variante:', variante, '| num:', num, '| descartado: otra comuna');
+            console.log('[buscar-rol] descartado: predios de comunas', comunasEnResultado, 'no coinciden con', codigoComuna);
             continue;
           }
         }

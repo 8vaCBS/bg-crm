@@ -197,19 +197,24 @@ module.exports = async function handler(req, res) {
 
     const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
 
-    // Limpiar calle según estándar catastral SII:
-    // mayúsculas, sin tildes, sin prefijos de vía (Avenida, Calle, Pasaje...)
-    const calleLimpia = calle.trim()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .toUpperCase()
-      .replace(/^(AVENIDA|AVDA|AV\.?|CALLE|PASAJE|PSJE|POBLACION|CAMINO|RUTA)\s+/, '')
-      .trim();
-
+    // Limpiar calle para el SII: mayúsculas, sin tildes, sin prefijos de vía
     const calleMayus = calle.trim()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toUpperCase();
 
-    // Variantes: primero sin prefijo (QUILIN SUR), luego con prefijo, luego original
+    const calleSinPrefijo = calleMayus
+      .replace(/^(AVENIDA|AVDA|AV\.?|CALLE|PASAJE|PSJE|POBLACION|CAMINO|RUTA)\s+/, '')
+      .trim();
+
+    // Si al quitar el prefijo la calle queda igual al nombre de la comuna,
+    // NO quitar el prefijo (ej: 'Av. Providencia' → no dejar solo 'PROVIDENCIA')
+    const comunaNorm2 = normalizar(comuna);
+    const calleSinPrefijoNorm = normalizar(calleSinPrefijo);
+    const calleLimpia = (calleSinPrefijoNorm === comunaNorm2 || calleSinPrefijo.length < 4)
+      ? calleMayus
+      : calleSinPrefijo;
+
+    // Variantes: primero sin prefijo, luego con prefijo, luego original
     const variantesCalle = [...new Set([calleLimpia, calleMayus, calle.trim()])];
 
     // Estrategia de fallback progresivo:

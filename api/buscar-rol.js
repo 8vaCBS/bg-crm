@@ -97,6 +97,7 @@ module.exports = async function handler(req, res) {
       { 'User-Agent': UA, 'Accept': 'text/html,*/*', 'Accept-Language': 'es-419,es;q=0.9' }
     );
     const cookies = sessionRes.cookies.map(c => c.split(';')[0]).join('; ');
+    console.log('[buscar-rol] cookie ok, status:', sessionRes.status, '| modo:', rolDirecto ? 'ROL' : (manzanaElegida ? 'MANZANA' : 'DIRECCION'), '| calle:', calle, '| num:', numero, '| comuna:', comuna);
     const baseHdrs = {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'es-419,es;q=0.9',
@@ -340,6 +341,7 @@ module.exports = async function handler(req, res) {
     });
 
   } catch(e) {
+    console.error('[buscar-rol] ERROR:', e.message, e.stack?.split('\n')[1]);
     return res.status(500).json({ error: e.message });
   }
 };

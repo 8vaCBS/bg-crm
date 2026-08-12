@@ -648,20 +648,18 @@ export default function App() {
                   <FichaItem label="Período"          value={selected.periodo} />
                   <FichaItem label="Avalúo Total"     value={clp(selected.avaluoFiscal)} />
                   <FichaItem label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
-                  {selected.rol && !selected.avaluoFiscal && (
-                    <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
-                      <div style={S.fichaItemLabel}>Consulta SII</div>
-                      <a href={selected.linkSII || `https://zeus.sii.cl/avalu_cgi/br/brc110.sh`}
-                        target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 13, color: C.navy, fontWeight: 600 }}>
-                        Ver avalúo fiscal en SII (ROL {selected.rol}) →
-                      </a>
-                      <div style={{ fontSize: 11, color: C.textSm, marginTop: 3 }}>
-                        El avalúo de este predio requiere consulta directa en el SII
-                      </div>
-                    </div>
-                  )}
                 </div>
+
+                {/* Editor manual de datos SII cuando no se obtuvieron automáticamente */}
+                {selected.rol && !selected.avaluoFiscal && (
+                  <DatosSIIEditor prop={selected} onSave={async (datos) => {
+                    try {
+                      await updatePropiedad(selected.id, datos);
+                      setSelected(prev => ({ ...prev, ...datos }));
+                      await load();
+                    } catch(e) { alert('Error guardando: ' + e.message); }
+                  }} />
+                )}
               </div>
 
               {/* Propietario */}
@@ -916,6 +914,72 @@ function ArriendoEditor({ prop, onSave }) {
         </button>
       </div>
       {prop.arriendoUF && <div style={{ marginTop: 8, fontSize: 13, color: C.success, fontWeight: 600 }}>Arriendo registrado: {prop.arriendoUF} UF/mes</div>}
+    </div>
+  );
+}
+
+function DatosSIIEditor({ prop, onSave }) {
+  const [avaluoFiscal, setAvaluoFiscal] = React.useState(prop.avaluoFiscal ? String(prop.avaluoFiscal) : '');
+  const [avaluoAfecto, setAvaluoAfecto] = React.useState(prop.avaluoAfecto ? String(prop.avaluoAfecto) : '');
+  const [destino, setDestino]           = React.useState(prop.destino || '');
+  const [periodo, setPeriodo]           = React.useState(prop.periodo || '');
+  const [saving, setSaving]             = React.useState(false);
+  const [saved, setSaved]               = React.useState(false);
+
+  const guardar = async () => {
+    setSaving(true);
+    await onSave({
+      avaluoFiscal:  avaluoFiscal ? parseInt(avaluoFiscal.replace(/[^0-9]/g, '')) : null,
+      avaluoAfecto:  avaluoAfecto ? parseInt(avaluoAfecto.replace(/[^0-9]/g, '')) : null,
+      destino:       destino || null,
+      periodo:       periodo || null,
+    });
+    setSaving(false); setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div style={{ marginTop: 16, padding: '14px 16px', background: '#FFFBEB', border: `1px solid #FCD34D`, borderRadius: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
+        Ingresar datos manualmente
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 12px' }}>
+        <div>
+          <label style={S.formLabel}>Avalúo Total ($)</label>
+          <input style={S.formInput} type="text" value={avaluoFiscal}
+            onChange={e => setAvaluoFiscal(e.target.value)}
+            placeholder="ej: 278865088" />
+        </div>
+        <div>
+          <label style={S.formLabel}>Avalúo Afecto ($)</label>
+          <input style={S.formInput} type="text" value={avaluoAfecto}
+            onChange={e => setAvaluoAfecto(e.target.value)}
+            placeholder="ej: 217153518" />
+        </div>
+        <div>
+          <label style={S.formLabel}>Destino</label>
+          <input style={S.formInput} type="text" value={destino}
+            onChange={e => setDestino(e.target.value)}
+            placeholder="ej: HABITACIONAL" />
+        </div>
+        <div>
+          <label style={S.formLabel}>Período</label>
+          <input style={S.formInput} type="text" value={periodo}
+            onChange={e => setPeriodo(e.target.value)}
+            placeholder="ej: SEGUNDO SEMESTRE 2026" />
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+        <button onClick={guardar} disabled={saving}
+          style={{ ...S.btnPrimary, padding: '8px 18px', fontSize: 13, background: '#92400E', width: 'auto' }}>
+          {saving ? 'Guardando...' : saved ? 'Guardado' : 'Guardar datos'}
+        </button>
+        <a href={`https://www4.sii.cl/mapasui/internet/#/contenido/index.html`}
+          target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 12, color: C.navy, fontWeight: 600 }}>
+          Consultar en mapa SII →
+        </a>
+      </div>
     </div>
   );
 }

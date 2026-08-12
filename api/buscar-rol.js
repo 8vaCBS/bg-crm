@@ -282,7 +282,22 @@ module.exports = async function handler(req, res) {
           }, H
         );
         const parsed = JSON.parse(r1.body);
-        predios = parsed?.data || [];
+        let resultado = parsed?.data || [];
+
+        // Filtro estricto de comuna: el SII puede devolver predios de otra
+        // comuna cuando hay calles con el mismo nombre en la RM
+        if (resultado.length > 0) {
+          const filtrados = resultado.filter(p => String(p.comuna) === String(codigoComuna));
+          if (filtrados.length > 0) {
+            resultado = filtrados; // Solo predios de la comuna correcta
+          } else {
+            // Todos son de otra comuna -> descartar esta variante
+            console.log('[buscar-rol] variante:', variante, '| num:', num, '| descartado: otra comuna');
+            continue;
+          }
+        }
+
+        predios = resultado;
         console.log('[buscar-rol] variante:', variante, '| num:', num, '| predios:', predios.length);
         if (predios.length > 0) {
           varianteUsada = variante;

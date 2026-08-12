@@ -206,11 +206,12 @@ module.exports = async function handler(req, res) {
     if (palabrasLimpias.length >= 3) {
       variantesCalle.push(palabrasLimpias.slice(0, 2).join(' ')); // primeras 2 palabras
     }
-    // Última opción: solo la primera palabra (el SII puede indexar así)
-    // "QUILIN SUR" → "QUILIN" encuentra todas las calles que empiezan con QUILIN
+    // Última opción: solo la primera palabra
     if (palabrasLimpias.length > 1 && palabrasLimpias[0].length > 3) {
       variantesCalle.push(palabrasLimpias[0]);
     }
+    // Comodín para condominios: el SII indexa casas internas bajo "CONDOMINIO" + número exterior
+    variantesCalle.push('CONDOMINIO');
 
     // Variantes de número: con/sin cero inicial
     const numerosVariantes = [numeroValido || ''];

@@ -181,41 +181,79 @@ module.exports = async function handler(req, res) {
 
     const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
 
-    // Generar variantes de la calle:
+    // Generar variantes de nombre de calle y número
+    const calleNorm = normalizar(calle.trim());
     const palabras = calle.trim().split(/\s+/);
-    const variantes = [];
-    variantes.push(calle.trim());                                           // original: "Fernando Marquez de la Plata"
-    if (palabras.length > 2) variantes.push(palabras.slice(0, palabras.length - 1).join(' ')); // sin última
-    if (palabras.length > 2) variantes.push(palabras.slice(0, 2).join(' ')); // primeras 2: "Fernando Marquez"
-    // Variante con abreviatura "Fdo." si el nombre empieza con nombre propio
     const primero = palabras[0].toLowerCase();
-    if (['fernando', 'francisco', 'federico'].includes(primero)) {
-      variantes.push('FDO ' + palabras.slice(1).join(' '));
-      variantes.push('FDO. ' + palabras.slice(1).join(' '));
-      variantes.push('FDO. ' + palabras.slice(1, 3).join(' '));
+
+    const variantesCalle = [];
+    variantesCalle.push(calle.trim());
+
+    // Sin artículos intermedios (de, la, del, las, los)
+    const sinArticulos = palabras.filter(p => !['de','la','del','las','los','el','y'].includes(p.toLowerCase())).join(' ');
+    if (sinArticulos !== calle.trim()) variantesCalle.push(sinArticulos);
+
+    // Abreviaturas de nombres propios al inicio
+    const abreviaturas = {
+      'fernando': 'FDO', 'francisco': 'FCO', 'federico': 'FECO',
+      'general':  'GRAL', 'coronel': 'CNEL', 'doctor': 'DR',
+      'don':      'DN', 'almirante': 'ALM', 'capitan': 'CAP',
+      'avenida':  '', 'avda': '', 'av': '',
+    };
+    const abrev = abreviaturas[primero];
+    if (abrev !== undefined) {
+      const resto = palabras.slice(1).join(' ');
+      const restoSinArt = palabras.slice(1).filter(p => !['de','la','del','las','los','el'].includes(p.toLowerCase())).join(' ');
+      if (abrev) {
+        variantesCalle.push(abrev + ' ' + resto);
+        variantesCalle.push(abrev + '. ' + resto);
+        variantesCalle.push(abrev + ' ' + restoSinArt);
+      } else {
+        // Avenida/Av: probar sin el prefijo
+        variantesCalle.push(resto);
+      }
     }
-    if (['avenida', 'av', 'av.', 'avda', 'avda.'].includes(primero)) {
-      variantes.push(palabras.slice(1).join(' ')); // sin "Avenida" adelante
+
+    // Truncar palabras: ir quitando la última palabra de a una
+    for (let i = palabras.length - 1; i >= 2; i--) {
+      variantesCalle.push(palabras.slice(0, i).join(' '));
+      // También la versión abreviada truncada
+      if (abrev && abrev !== '') {
+        variantesCalle.push(abrev + ' ' + palabras.slice(1, i).join(' '));
+      }
     }
-    const variantesUnicas = [...new Set(variantes)];
+
+    // Variantes de número: con y sin cero adelante
+    const numerosVariantes = [numero || ''];
+    if (numero && !numero.startsWith('0') && numero.length <= 3) {
+      numerosVariantes.push('0' + numero); // agregar cero: 134 → 0134
+    }
+    if (numero && numero.startsWith('0')) {
+      numerosVariantes.push(numero.slice(1)); // quitar cero: 0134 → 134
+    }
+
+    const variantesUnicas = [...new Set(variantesCalle)];
 
     let predios = [];
     let varianteUsada = calle;
 
     for (const variante of variantesUnicas) {
-      const r1 = await fetchPost('www4.sii.cl',
-        '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
-        {
-          metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPrediosDireccion", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
-          data: { rolDireccion: { comuna: codigoComuna, nombreComuna: comuna.toUpperCase(), calle: variante, numeroCalleStr: numero || '', detalle: 0 }, servicios: [] }
-        }, baseHdrs
-      );
-      const j1 = JSON.parse(r1.body);
-      predios = j1?.data || [];
-      if (predios.length > 0) {
-        varianteUsada = variante;
-        break;
+      for (const num of numerosVariantes) {
+        const r1 = await fetchPost('www4.sii.cl',
+          '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
+          {
+            metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPrediosDireccion", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+            data: { rolDireccion: { comuna: codigoComuna, nombreComuna: comuna.toUpperCase(), calle: variante, numeroCalleStr: num, detalle: 0 }, servicios: [] }
+          }, baseHdrs
+        );
+        const j1 = JSON.parse(r1.body);
+        predios = j1?.data || [];
+        if (predios.length > 0) {
+          varianteUsada = variante;
+          break;
+        }
       }
+      if (predios.length > 0) break;
     }
 
     if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });

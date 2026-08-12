@@ -385,15 +385,15 @@ export default function App() {
               <Row label="Período"          value={selected.periodo} />
               <DuenoEditor prop={selected} onSave={async (datos) => {
                 try {
-                  await actualizarPropiedad(selected.id, datos);
+                  await updatePropiedad(selected.id, datos);
                   setSelected(prev => ({...prev, ...datos}));
-                  await cargarPropiedades();
+                  await load();
                 } catch(e) { alert('Error guardando: ' + e.message); }
               }} />
               <ArriendoEditor prop={selected} onSave={(uf) => {
-                actualizarPropiedad(selected.id, { arriendoUF: uf });
+                updatePropiedad(selected.id, { arriendoUF: uf });
                 setSelected({...selected, arriendoUF: uf});
-                cargarPropiedades();
+                load();
               }} />
 
               <div style={{ marginTop: 20 }}>

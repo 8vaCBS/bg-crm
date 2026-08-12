@@ -145,15 +145,18 @@ module.exports = async function handler(req, res) {
         try {
           const comunaNorm = normalizar(comuna || 'nunoa');
           const zeusCode = ZEUS_COMUNA_CODES[comunaNorm] || '13120';
-          // zeus.sii.cl acepta GET con RGN=13&CNT=CODIGO&ROL=MANZANA-PREDIO
           const zeusUrl = `https://zeus.sii.cl/avalu_cgi/br/brc110.sh?RGN=13&CNT=${zeusCode}&ROL=${rolDirecto}&BL_TIPO=ALL`;
+          console.log('[ZEUS] Consultando:', zeusUrl);
           const zeusRes = await fetchGet(zeusUrl, {
             'User-Agent': UA,
-            'Accept': 'text/html',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'es-419,es;q=0.9',
             'Referer': 'https://zeus.sii.cl/avalu_cgi/br/brc110.sh',
           });
-          if (zeusRes.status === 200 && zeusRes.body.includes(rolDirecto)) {
+          console.log('[ZEUS] Status:', zeusRes.status, '| Body snippet:', zeusRes.body.slice(0, 400));
+          if (zeusRes.status === 200) {
             const zeus = parsearZeus(zeusRes.body);
+            console.log('[ZEUS] Datos parseados:', JSON.stringify(zeus));
             if (zeus.avaluoFiscal || zeus.rol) {
               return res.status(200).json({
                 rol: zeus.rol || rolDirecto,
@@ -165,7 +168,7 @@ module.exports = async function handler(req, res) {
               });
             }
           }
-        } catch(eZeus) { console.log('zeus error:', eZeus.message); }
+        } catch(eZeus) { console.log('[ZEUS] error:', eZeus.message); }
         return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII' });
       }
 

@@ -63,6 +63,8 @@ export default function App() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroComuna, setFiltroComuna] = useState('');
   const [pagina, setPagina]     = useState(1);
+  const [seleccion, setSeleccion] = useState(new Set());
+  const [modoSeleccion, setModoSeleccion] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,6 +127,12 @@ export default function App() {
     setProc(true); setLog([]);
     for (let i = 0; i < lines.length; i++) {
       const texto = lines[i];
+      // Detectar duplicado por dirección normalizada
+      const yaExiste = props.find(p => norm(p.direccion) === norm(texto));
+      if (yaExiste) {
+        setLog(prev => [...prev, { texto, estado: 'warn', msg: 'Ya existe en el listado — omitida' }]);
+        continue;
+      }
       const { calle, numero, comuna, codigoComuna } = parsearDireccion(texto);
       setLog(prev => [...prev, { texto, estado: 'buscando', msg: 'Consultando SII...' }]);
       const sii = await buscarEnSII(calle, numero, codigoComuna);
@@ -132,7 +140,6 @@ export default function App() {
       try {
         const docId = await addPropiedad(data);
         if (!sii?.rol) {
-          // Sin ROL: guardar igual y mostrar opción para ingresarlo manualmente
           setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'warn', msg: 'Sin ROL en SII', sinRol: true, propiedadId: docId, comuna } : l));
         } else {
           setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'ok', msg: `ROL: ${sii.rol}` } : l));
@@ -143,6 +150,33 @@ export default function App() {
       if (i < lines.length - 1) await new Promise(r => setTimeout(r, 800));
     }
     setInput(''); setProc(false); await load();
+  };
+
+  const toggleSeleccion = (id) => {
+    setSeleccion(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const seleccionarTodos = () => {
+    if (seleccion.size === propsEnPagina.length) {
+      setSeleccion(new Set());
+    } else {
+      setSeleccion(new Set(propsEnPagina.map(p => p.id)));
+    }
+  };
+
+  const eliminarSeleccionados = async () => {
+    if (!seleccion.size) return;
+    if (!window.confirm(`¿Eliminar ${seleccion.size} propiedad${seleccion.size > 1 ? 'es' : ''}?`)) return;
+    for (const id of seleccion) {
+      await deletePropiedad(id);
+    }
+    setSeleccion(new Set());
+    setModoSeleccion(false);
+    await load();
   };
 
   const buscarPorRol = async (logIdx, propiedadId, rolInput, comuna, direccion) => {
@@ -403,6 +437,31 @@ export default function App() {
               </select>
             </div>
 
+            {/* Barra de selección múltiple */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              {!modoSeleccion ? (
+                <button style={S.btnSeleccionar} onClick={() => { setModoSeleccion(true); setSeleccion(new Set()); }}>
+                  Seleccionar para eliminar
+                </button>
+              ) : (
+                <>
+                  <button style={S.btnSeleccionar} onClick={seleccionarTodos}>
+                    {seleccion.size === propsEnPagina.length ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                  </button>
+                  {seleccion.size > 0 && (
+                    <button style={{ ...S.btnSeleccionar, background: C.danger, color: 'white', borderColor: C.danger }}
+                      onClick={eliminarSeleccionados}>
+                      Eliminar {seleccion.size} seleccionada{seleccion.size > 1 ? 's' : ''}
+                    </button>
+                  )}
+                  <button style={{ ...S.btnSeleccionar, color: C.textSm }}
+                    onClick={() => { setModoSeleccion(false); setSeleccion(new Set()); }}>
+                    Cancelar
+                  </button>
+                </>
+              )}
+            </div>
+
             {loading ? (
               <div style={S.loadingState}>Cargando propiedades...</div>
             ) : propsFiltradas.length === 0 ? (
@@ -415,7 +474,20 @@ export default function App() {
             ) : (
               <>
                 {propsEnPagina.map(p => (
-                  <PropCard key={p.id} prop={p} onOpen={() => { setSelected(p); }} onStatus={cambiarStatus} />
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    {modoSeleccion && (
+                      <input type="checkbox" checked={seleccion.has(p.id)}
+                        onChange={() => toggleSeleccion(p.id)}
+                        style={{ marginTop: 18, width: 18, height: 18, cursor: 'pointer', accentColor: C.navy, flexShrink: 0 }} />
+                    )}
+                    <div style={{ flex: 1 }}>
+                      <PropCard prop={p}
+                        onOpen={() => { if (!modoSeleccion) setSelected(p); else toggleSeleccion(p.id); }}
+                        onStatus={cambiarStatus}
+                        seleccionado={seleccion.has(p.id)}
+                        modoSeleccion={modoSeleccion} />
+                    </div>
+                  </div>
                 ))}
                 {/* Paginador */}
                 {totalPaginas > 1 && (
@@ -555,13 +627,17 @@ export default function App() {
 
 // ── SUB-COMPONENTES ───────────────────────────
 
-function PropCard({ prop, onOpen, onStatus }) {
+function PropCard({ prop, onOpen, onStatus, seleccionado, modoSeleccion }) {
   const estado = ESTADOS.find(e => e.key === prop.status) || ESTADOS[0];
   const necesitaSeguimiento = prop.status === 'contactado' && prop.fechaContacto &&
     (Date.now() - new Date(prop.fechaContacto)) / 86400000 >= 2;
 
   return (
-    <div style={{ ...S.propCard, borderLeft: `3px solid ${necesitaSeguimiento ? C.gold : estado.color}` }} onClick={onOpen}>
+    <div style={{ ...S.propCard,
+      borderLeft: `3px solid ${seleccionado ? C.navy : necesitaSeguimiento ? C.gold : estado.color}`,
+      background: seleccionado ? '#EEF2FF' : C.white,
+      cursor: modoSeleccion ? 'pointer' : 'pointer',
+    }} onClick={onOpen}>
       <div style={S.propCardTop}>
         <div style={S.propCardDir}>{prop.direccion}</div>
         <span style={{ ...S.estadoPill, background: estado.color }}>{estado.label}</span>
@@ -928,6 +1004,8 @@ const S = {
 
   // textarea
   textarea:   { width: '100%', padding: '12px 14px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, fontFamily: 'monospace', resize: 'vertical', boxSizing: 'border-box', background: C.white, color: C.text, outline: 'none' },
+
+  btnSeleccionar: { padding: '7px 14px', background: C.white, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontWeight: 600, color: C.navy, cursor: 'pointer' },
 
   // reports
   reportCard:       { background: C.white, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.gold}`, borderRadius: 12, padding: '16px 18px', transition: 'box-shadow 0.15s' },

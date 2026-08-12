@@ -148,15 +148,37 @@ module.exports = async function handler(req, res) {
     console.log('[buscar-rol] sesion ok | calle:', calle, '| num:', numero, '| comuna:', comuna, '| rol:', rolDirecto);
 
     // Función: obtener datos completos de un predio
-    async function getDatosPredio(codigoComuna, manzana, predioNum) {
-      const r2 = await fetchPost('www4.sii.cl',
-        '/mapasui/services/data/mapasFacadeService/getPredioNacional',
-        {
-          metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioNacional", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
-          data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
-        }, H
-      );
-      let d = JSON.parse(r2.body)?.data || {};
+    async function getDatosPredio(codigoComuna, manzana, predioNum, idPredioPublicado) {
+      let d = {};
+
+      // Si tenemos el ID de publicación, usar getPredioPublicado directamente
+      // (más confiable para condominios y sub-unidades)
+      if (idPredioPublicado) {
+        console.log('[getDatosPredio] usando getPredioPublicado ID:', idPredioPublicado);
+        const rPub = await fetchPost('www4.sii.cl',
+          '/mapasui/services/data/mapasFacadeService/getPredioPublicado',
+          { metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioPublicado", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+            data: { idPredioPublicado: parseInt(idPredioPublicado), servicios: [] }
+          }, H
+        );
+        const dPub = JSON.parse(rPub.body)?.data || {};
+        console.log('[getDatosPredio] getPredioPublicado result:', JSON.stringify(dPub).slice(0,200));
+        if (dPub.rol || dPub.valorTotal || dPub.valorAfecto) {
+          d = dPub;
+        }
+      }
+
+      // Si no tenemos ID o no dio resultado, usar getPredioNacional
+      if (!d.rol && !d.valorTotal && !d.valorAfecto) {
+        const r2 = await fetchPost('www4.sii.cl',
+          '/mapasui/services/data/mapasFacadeService/getPredioNacional',
+          {
+            metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioNacional", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+            data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
+          }, H
+        );
+        d = JSON.parse(r2.body)?.data || {};
+      }
 
       // Si el SII devuelve vacío, probar con código de comuna alternativo
       // El endpoint getPredioNacional puede requerir un código distinto al del mapa
@@ -366,7 +388,10 @@ module.exports = async function handler(req, res) {
 
     // Obtener datos completos del primer predio
     const predio = predios[0];
-    const datos = await getDatosPredio(codigoComuna, predio.manzana, predio.predio);
+    // Capturar el ID de publicación si viene en la respuesta de getPrediosDireccion
+    const idPredioPublicado = predio.idPredioPublicado || predio.predioPublicado?.id || null;
+    console.log('[buscar-rol] predio encontrado:', predio.rol, '| idPredioPublicado:', idPredioPublicado);
+    const datos = await getDatosPredio(codigoComuna, predio.manzana, predio.predio, idPredioPublicado);
 
     if (!datos) {
       return res.status(200).json({ rol: null, error: 'Sin datos en SII' });

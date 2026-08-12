@@ -156,7 +156,33 @@ module.exports = async function handler(req, res) {
           data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
         }, H
       );
-      const d = JSON.parse(r2.body)?.data || {};
+      let d = JSON.parse(r2.body)?.data || {};
+
+      // Si el SII devuelve vacío, probar con código de comuna alternativo
+      // El endpoint getPredioNacional puede requerir un código distinto al del mapa
+      if (!d.rol && !d.valorTotal && !d.valorAfecto) {
+        // Mapeo de códigos de mapa → códigos de catastro de avalúos
+        const MAPA_A_CATASTRO = {
+          '15122': '15108', // Peñalolén: mapa=15122, catastro=15108
+          '15123': '15103', // Providencia: mapa=15123, catastro=15103
+          '15114': '15102', // Las Condes: mapa=15114, catastro=15102
+          '15105': '15120', // Ñuñoa: mapa=15105, catastro=15120
+        };
+        const codigoAlt = MAPA_A_CATASTRO[String(codigoComuna)];
+        if (codigoAlt) {
+          console.log('[getDatosPredio] Reintentando con código catastro:', codigoAlt);
+          const r3 = await fetchPost('www4.sii.cl',
+            '/mapasui/services/data/mapasFacadeService/getPredioNacional',
+            { metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioNacional", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+              data: { predio: { comuna: parseInt(codigoAlt), manzana, predio: predioNum }, servicios: [] }
+            }, H
+          );
+          const d3 = JSON.parse(r3.body)?.data || {};
+          console.log('[getDatosPredio] alt result:', JSON.stringify(d3).slice(0,150));
+          if (d3.rol || d3.valorTotal || d3.valorAfecto) d = d3;
+        }
+      }
+
       // Si no hay datos en absoluto, retornar null
       const tieneAlgunDato = d.rol || d.valorTotal || d.valorAfecto || d.destinoDescripcion || d.direccion;
       if (!tieneAlgunDato) return null;

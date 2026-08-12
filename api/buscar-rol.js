@@ -127,6 +127,30 @@ module.exports = async function handler(req, res) {
       supConstruida = servicios.supConsMt2 || servicios.supConstruida || d.supConsMt2 || null;
     } catch(e) {}
 
+    // Paso 4: Obtener superficie desde getPredioPublicado
+    let supTerreno = null;
+    let supConstruida = null;
+    const predioPublicadoId = d.predioPublicado?.id;
+
+    if (predioPublicadoId) {
+      try {
+        const r4 = await fetchPost('www4.sii.cl',
+          '/mapasui/services/data/mapasFacadeService/getPredioPublicado',
+          {
+            metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioPublicado", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+            data: { idPredioPublicado: predioPublicadoId, servicios: [] }
+          }, baseHdrs
+        );
+        const j4 = JSON.parse(r4.body);
+        const dp = j4?.data;
+        if (dp) {
+          supTerreno = (dp.supTerreno && dp.supTerreno > 0) ? dp.supTerreno : null;
+          supConstruida = (dp.supConsMt2 && dp.supConsMt2 > 0) ? dp.supConsMt2 : 
+                         (dp.supConstruida && dp.supConstruida > 0) ? dp.supConstruida : null;
+        }
+      } catch(e) {}
+    }
+
     return res.status(200).json({
       rol: d.rol || predio.rol || null,
       todosRoles: predios.map(p => p.rol).filter(Boolean),
@@ -135,11 +159,12 @@ module.exports = async function handler(req, res) {
       direccionSII: (d.direccion || predio.direccion || '').trim(),
       destino: d.destinoDescripcion || predio.destinoDescripcion || null,
       ubicacion: d.ubicacion || null,
-      supTerreno: (d.supTerreno && d.supTerreno > 0) ? d.supTerreno : null,
-      supConstruida: (d.supConsMt2 && d.supConsMt2 > 0) ? d.supConsMt2 : null,
+      supTerreno,
+      supConstruida,
       coordenadas: d.ubicacionX ? { lat: d.ubicacionX, lng: d.ubicacionY } : null,
       areaHomogenea: d.ah || null,
-      rawD: JSON.stringify(d).substring(0, 1000),
+      rangoSuperficie: d.datosAh?.rangoSuperficie?.trim() || null,
+      predioPublicadoId: d.predioPublicado?.id || null,
       periodo: d.periodo || null,
       manzana,
       predio: predioNum,

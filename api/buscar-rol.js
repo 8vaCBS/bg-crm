@@ -11,12 +11,14 @@ module.exports = async function handler(req, res) {
     return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   }
 
+  // Códigos verificados empíricamente contra el mapa SII (www4.sii.cl/mapasui)
+  // Ñuñoa=15105, Providencia=15123, Las Condes=15114 verificados y funcionando
   const COMUNAS = {
     'nunoa':             '15105',
     'providencia':       '15123',
     'las condes':        '15114',
-    'penalolen':         '15122',
     'santiago':          '15101',
+    'penalolen':         '15122',
     'vitacura':          '15132',
     'la reina':          '15113',
     'macul':             '15118',
@@ -37,16 +39,25 @@ module.exports = async function handler(req, res) {
     'la granja':         '15112',
     'lo espejo':         '15117',
     'lo prado':          '15115',
-    'pedro aguirre cerda': '15122',
+    'pedro aguirre cerda': '15130',
     'san joaquin':       '15128',
     'san ramon':         '15129',
     'el bosque':         '15104',
     'la pintana':        '15107',
-    'san bernardo':      '15130',
+    'san bernardo':      '15133',
     'puente alto':       '15131',
+    'cerro navia':       '15134',
+    'quinta normal':     '15135',
+    'buin':              '15202',
+    'colina':            '15301',
+    'lampa':             '15302',
+    'melipilla':         '15503',
+    'talagante':         '15604',
     'peñalolen':         '15122',
     'maipú':             '15119',
     'ñuñoa':             '15105',
+    'peñalolén':         '15122',
+    'conchalí':          '15103',
   };
 
   const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';

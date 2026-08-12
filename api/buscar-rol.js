@@ -267,15 +267,15 @@ module.exports = async function handler(req, res) {
 
     if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
 
-    // Si hay múltiples predios, verificar si tienen destinos/ROLs realmente distintos
-    // El SII devuelve varios predios para un mismo edificio (depts, estacionamientos, etc.)
-    // Solo pedimos que elija si hay destinos distintos entre los primeros resultados
+    // Si hay múltiples predios: solo pedir elección cuando hay destinos
+    // CLARAMENTE distintos (ej: CASA vs ESTACIONAMIENTO vs SITIO).
+    // Si todos son del mismo tipo, tomar el primero — es el comportamiento correcto.
     if (predios.length > 1) {
-      const destinos = [...new Set(predios.slice(0, 6).map(p => p.destinoDescripcion || ''))];
-      const manzanas = [...new Set(predios.map(p => p.manzana))];
-      // Si hay más de una manzana O más de un destino distinto → realmente son predios distintos
-      const sonDistintos = manzanas.length > 1 || destinos.length > 1;
-      if (sonDistintos) {
+      const DESTINOS_RELEVANTES = ['CASA','DEPARTAMENTO','SITIO','OFICINA','BODEGA','LOCAL COMERCIAL','HOSTAL','HOTEL'];
+      const destinosPresentes = [...new Set(predios.map(p => (p.destinoDescripcion || '').toUpperCase()))];
+      const destinosRelevantes = destinosPresentes.filter(d => DESTINOS_RELEVANTES.some(r => d.includes(r)));
+      // Solo mostrar selector si hay 2+ destinos relevantes distintos
+      if (destinosRelevantes.length > 1) {
         const resumen = predios.slice(0, 8).map(p => ({
           rol:      p.rol,
           manzana:  p.manzana,
@@ -289,7 +289,7 @@ module.exports = async function handler(req, res) {
           rol: null,
         });
       }
-      // Misma manzana, mismo destino → tomar el primero normalmente
+      // Un solo tipo de destino → tomar el primero normalmente
     }
 
     const predio = predios[0];

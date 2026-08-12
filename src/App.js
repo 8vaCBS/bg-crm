@@ -384,9 +384,11 @@ export default function App() {
               <Row label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
               <Row label="Período"          value={selected.periodo} />
               <DuenoEditor prop={selected} onSave={async (datos) => {
-                await actualizarPropiedad(selected.id, datos);
-                setSelected({...selected, ...datos});
-                await cargarPropiedades();
+                try {
+                  await actualizarPropiedad(selected.id, datos);
+                  setSelected(prev => ({...prev, ...datos}));
+                  await cargarPropiedades();
+                } catch(e) { alert('Error guardando: ' + e.message); }
               }} />
               <ArriendoEditor prop={selected} onSave={(uf) => {
                 actualizarPropiedad(selected.id, { arriendoUF: uf });

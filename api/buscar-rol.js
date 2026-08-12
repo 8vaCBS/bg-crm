@@ -95,8 +95,9 @@ module.exports = async function handler(req, res) {
         }, baseHdrs
       );
       const j2 = JSON.parse(r2.body);
+      console.log('[ROL-DIRECTO] respuesta SII:', JSON.stringify(j2).slice(0, 500));
       const d = j2?.data || {};
-      if (!d.rol) return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII' });
+      if (!d.rol) return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII', debug: j2 });
 
       // Superficie
       let supTerreno = null, supConstruida = null;

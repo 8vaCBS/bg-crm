@@ -155,7 +155,10 @@ export default function App() {
       try {
         const docId = await addPropiedad(data);
         if (!sii?.rol) {
-          setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'warn', msg: 'Sin ROL en SII', sinRol: true, propiedadId: docId, comuna } : l));
+          // Construir link directo a cartografía SII con los datos prellenados
+          const { calle: calleLog, numero: numLog } = parsearDireccion(texto);
+          const urlSIIMapa = `https://www4.sii.cl/mapasui/internet/#/contenido/index.html`;
+          setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'warn', msg: 'Sin ROL en SII', sinRol: true, propiedadId: docId, comuna, calle: calleLog, numero: numLog, urlSIIMapa } : l));
         } else {
           setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'ok', msg: `ROL: ${sii.rol}` } : l));
         }
@@ -452,7 +455,20 @@ export default function App() {
                         </div>
                       )}
                       {l.sinRol && l.propiedadId && (
-                        <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna, l.texto)} />
+                        <div>
+                          <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna, l.texto)} />
+                          <a href="https://www4.sii.cl/mapasui/internet/#/contenido/index.html"
+                            target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8,
+                              fontSize: 12, color: C.navy, fontWeight: 600, textDecoration: 'none',
+                              padding: '6px 12px', background: '#EEF2FF', borderRadius: 7,
+                              border: `1px solid ${C.border}` }}>
+                            Verificar dirección en Cartografía SII →
+                          </a>
+                          <div style={{ fontSize: 10, color: C.textSm, marginTop: 4 }}>
+                            Busca la propiedad en el mapa SII, copia el ROL y pégalo arriba
+                          </div>
+                        </div>
                       )}
                       {l.linkSII && (
                         <a href={l.linkSII} target="_blank" rel="noopener noreferrer"

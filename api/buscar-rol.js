@@ -201,10 +201,15 @@ module.exports = async function handler(req, res) {
     // Variantes: primero sin prefijo (QUILIN SUR), luego con prefijo, luego original
     const variantesCalle = [...new Set([calleLimpia, calleMayus, calle.trim()])];
 
-    // Para calles largas, probar también primeras 2 palabras de la versión limpia
+    // Estrategia de fallback progresivo:
     const palabrasLimpias = calleLimpia.split(/\s+/);
     if (palabrasLimpias.length >= 3) {
-      variantesCalle.push(palabrasLimpias.slice(0, 2).join(' '));
+      variantesCalle.push(palabrasLimpias.slice(0, 2).join(' ')); // primeras 2 palabras
+    }
+    // Última opción: solo la primera palabra (el SII puede indexar así)
+    // "QUILIN SUR" → "QUILIN" encuentra todas las calles que empiezan con QUILIN
+    if (palabrasLimpias.length > 1 && palabrasLimpias[0].length > 3) {
+      variantesCalle.push(palabrasLimpias[0]);
     }
 
     // Variantes de número: con/sin cero inicial

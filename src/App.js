@@ -370,6 +370,9 @@ export default function App() {
 
             <div style={S.modalBody}>
               <Row label="ROL"              value={selected.rol} />
+              <Row label="Propietario"      value={selected.duenoNombre} />
+              <Row label="Teléfono"         value={selected.duenoTelefono} />
+              <Row label="Email"            value={selected.duenoEmail} />
               <Row label="Dirección SII"    value={selected.direccionSII} />
               <Row label="Comuna"           value={selected.comuna} />
               <Row label="Destino"          value={selected.destino} />
@@ -380,6 +383,11 @@ export default function App() {
               <Row label="Avalúo Total"     value={clp(selected.avaluoFiscal)} />
               <Row label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
               <Row label="Período"          value={selected.periodo} />
+              <DuenoEditor prop={selected} onSave={async (datos) => {
+                await actualizarPropiedad(selected.id, datos);
+                setSelected({...selected, ...datos});
+                await cargarPropiedades();
+              }} />
               <ArriendoEditor prop={selected} onSave={(uf) => {
                 actualizarPropiedad(selected.id, { arriendoUF: uf });
                 setSelected({...selected, arriendoUF: uf});
@@ -438,6 +446,7 @@ function PropCard({ prop, onOpen, onStatus }) {
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
         {prop.rol && <Tag color="#EFF6FF" text={`ROL: ${prop.rol}`} />}
+        {prop.duenoNombre && <Tag color="#EFF6FF" text={`👤 ${prop.duenoNombre}`} />}
         {prop.destino && <Tag color="#F3F4F6" text={prop.destino} />}
         {prop.supConstruida && <Tag color="#F0FDF4" text={`${prop.supConstruida} m²`} />}
         {prop.avaluoFiscal && <Tag color="#ECFDF5" text={clp(prop.avaluoFiscal)} />}
@@ -487,6 +496,77 @@ function Row({ label, value }) {
     </div>
   );
 }
+
+function DuenoEditor({ prop, onSave }) {
+  const [nombre, setNombre] = useState(prop.duenoNombre || '');
+  const [telefono, setTelefono] = useState(prop.duenoTelefono || '');
+  const [email, setEmail] = useState(prop.duenoEmail || '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const guardar = async () => {
+    setSaving(true);
+    await onSave({ duenoNombre: nombre, duenoTelefono: telefono, duenoEmail: email });
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #F3F4F6' }}>
+      <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10, fontWeight: 600 }}>DATOS DEL PROPIETARIO</div>
+      
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 3 }}>Nombre</div>
+          <input
+            type="text"
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            placeholder="Nombre completo del dueño"
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+          />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 3 }}>Teléfono</div>
+          <input
+            type="tel"
+            value={telefono}
+            onChange={e => setTelefono(e.target.value)}
+            placeholder="+56 9 XXXX XXXX"
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+          />
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 3 }}>Email</div>
+          <input
+            type="email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="correo@ejemplo.com"
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
+          />
+        </div>
+        <button
+          onClick={guardar}
+          disabled={saving}
+          style={{ padding: '10px', background: saving ? '#9CA3AF' : '#1E3A5F', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}
+        >
+          {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar datos del propietario'}
+        </button>
+      </div>
+
+      {(prop.duenoNombre || prop.duenoTelefono || prop.duenoEmail) && (
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#EFF6FF', borderRadius: 8, fontSize: 12 }}>
+          {prop.duenoNombre && <div>👤 <strong>{prop.duenoNombre}</strong></div>}
+          {prop.duenoTelefono && <div style={{ marginTop: 3 }}>📱 {prop.duenoTelefono}</div>}
+          {prop.duenoEmail && <div style={{ marginTop: 3 }}>✉️ {prop.duenoEmail}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function ArriendoEditor({ prop, onSave }) {
   const [val, setVal] = useState(prop.arriendoUF || '');

@@ -301,22 +301,29 @@ module.exports = async function handler(req, res) {
 
     if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
 
-    // Si hay múltiples predios en la misma dirección, devolverlos todos para que
-    // el frontend muestre opciones al usuario
+    // Si hay múltiples predios, verificar si tienen destinos/ROLs realmente distintos
+    // El SII devuelve varios predios para un mismo edificio (depts, estacionamientos, etc.)
+    // Solo pedimos que elija si hay destinos distintos entre los primeros resultados
     if (predios.length > 1) {
-      // Obtener destino de cada predio para mostrar descripción útil
-      const resumen = predios.map(p => ({
-        rol:     p.rol,
-        manzana: p.manzana,
-        predio:  p.predio,
-        destino: p.destinoDescripcion || null,
-        direccion: (p.direccion || '').trim(),
-      }));
-      return res.status(200).json({
-        multiplesResultados: true,
-        predios: resumen,
-        rol: null,
-      });
+      const destinos = [...new Set(predios.slice(0, 6).map(p => p.destinoDescripcion || ''))];
+      const manzanas = [...new Set(predios.map(p => p.manzana))];
+      // Si hay más de una manzana O más de un destino distinto → realmente son predios distintos
+      const sonDistintos = manzanas.length > 1 || destinos.length > 1;
+      if (sonDistintos) {
+        const resumen = predios.slice(0, 8).map(p => ({
+          rol:      p.rol,
+          manzana:  p.manzana,
+          predio:   p.predio,
+          destino:  p.destinoDescripcion || null,
+          direccion:(p.direccion || '').trim(),
+        }));
+        return res.status(200).json({
+          multiplesResultados: true,
+          predios: resumen,
+          rol: null,
+        });
+      }
+      // Misma manzana, mismo destino → tomar el primero normalmente
     }
 
     const predio = predios[0];

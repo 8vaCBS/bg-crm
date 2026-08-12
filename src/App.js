@@ -86,6 +86,10 @@ export default function App() {
   }, []);
 
   // ── métricas ──────────────────────────────
+  // Orden del pipeline para calcular conversiones acumulativas
+  const ORDEN_PIPELINE = ['nuevo', 'contactado', 'reunion', 'representacion', 'venta', 'vendida'];
+  const etapaIdx = (status) => ORDEN_PIPELINE.indexOf(status);
+
   const m = {
     total:    props.length,
     nuevo:    props.filter(p => p.status === 'nuevo').length,
@@ -97,7 +101,11 @@ export default function App() {
       if (p.status !== 'contactado' || !p.fechaContacto) return false;
       const d = p.fechaContacto.toDate ? p.fechaContacto.toDate() : new Date(p.fechaContacto);
       return (Date.now() - d) / 86400000 >= 2;
-    }).length
+    }).length,
+    // Conversión acumulativa: llegaron a esa etapa O la superaron
+    llegaronAContactado:     props.filter(p => etapaIdx(p.status) >= etapaIdx('contactado')).length,
+    llegaronAReunion:        props.filter(p => etapaIdx(p.status) >= etapaIdx('reunion')).length,
+    llegaronARepresentacion: props.filter(p => etapaIdx(p.status) >= etapaIdx('representacion')).length,
   };
 
   // ── capturar propiedades ───────────────────
@@ -250,9 +258,9 @@ export default function App() {
             <h3 style={S.h3}>Conversión</h3>
             <div style={S.grid2}>
               <Conv label="Contactadas → Reuniones"
-                val={m.contactado > 0 ? Math.round(m.reunion / m.contactado * 100) : 0} />
+                val={m.llegaronAContactado > 0 ? Math.round(m.llegaronAReunion / m.llegaronAContactado * 100) : 0} />
               <Conv label="Reuniones → Representación"
-                val={m.reunion > 0 ? Math.round(m.rep / m.reunion * 100) : 0} />
+                val={m.llegaronAReunion > 0 ? Math.round(m.llegaronARepresentacion / m.llegaronAReunion * 100) : 0} />
             </div>
           </div>
         )}

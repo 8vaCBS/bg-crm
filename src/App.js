@@ -379,8 +379,22 @@ export default function App() {
             <div style={S.modalBody}>
               <Row label="ROL"              value={selected.rol} />
               <Row label="Propietario"      value={selected.duenoNombre} />
-              <Row label="Teléfono"         value={selected.duenoTelefono} />
-              <Row label="Email"            value={selected.duenoEmail} />
+              <Row label="RUT"              value={selected.duenoRut} />
+              {/* Todos los teléfonos */}
+              {(selected.duenoTelefonos?.length > 0
+                ? selected.duenoTelefonos
+                : selected.duenoTelefono ? [selected.duenoTelefono] : []
+              ).map((t, i) => (
+                <Row key={`tel-${i}`} label={i === 0 ? "Teléfono" : `Teléfono ${i + 1}`} value={t} />
+              ))}
+              {/* Todos los emails */}
+              {(selected.duenoEmails?.length > 0
+                ? selected.duenoEmails
+                : selected.duenoEmail ? [selected.duenoEmail] : []
+              ).map((em, i) => (
+                <Row key={`em-${i}`} label={i === 0 ? "Email" : `Email ${i + 1}`} value={em} />
+              ))}
+              <Row label="Sociedades"       value={selected.duenoSociedades} />
               <Row label="Dirección SII"    value={selected.direccionSII} />
               <Row label="Comuna"           value={selected.comuna} />
               <Row label="Destino"          value={selected.destino} />
@@ -529,7 +543,6 @@ function DuenoEditor({ prop, onSave }) {
     if (!file) return;
     setProcesando(true);
     try {
-      // Leer PDF como base64
       const b64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result.split(',')[1]);
@@ -537,41 +550,43 @@ function DuenoEditor({ prop, onSave }) {
         reader.readAsDataURL(file);
       });
 
-      // Enviar a API
       const res = await fetch('/api/procesar-equifax', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfBase64: b64 })
       });
       const datos = await res.json();
-
       if (datos.error) throw new Error(datos.error);
 
-      // Guardar datos extras en Firebase
-      const extra = {};
-      if (datos.telefonos?.length > 1) extra.duenoTelefonos = datos.telefonos;
-      if (datos.emails?.length > 1) extra.duenoEmails = datos.emails;
-      if (datos.superficieConstruida) extra.supConstruida = datos.superficieConstruida;
-      if (datos.rut) extra.duenoRut = datos.rut;
-      if (datos.sociedades?.length) extra.duenoSociedades = datos.sociedades.join(', ');
+      // Guardar todos los teléfonos y emails (arrays completos)
+      const telefonos = Array.isArray(datos.telefonos) ? datos.telefonos.filter(Boolean) : [];
+      const emails    = Array.isArray(datos.emails)    ? datos.emails.filter(Boolean)    : [];
 
-      // Actualizar estados locales
+      // Actualizar campos principales visibles en el formulario
       if (datos.propietario) setNombre(datos.propietario);
-      if (datos.telefonos?.[0]) setTelefono(datos.telefonos[0]);
-      if (datos.emails?.[0]) setEmail(datos.emails[0]);
-      
+      if (telefonos[0])      setTelefono(telefonos[0]);
+      if (emails[0])         setEmail(emails[0]);
+
       await onSave({
-        duenoNombre: datos.propietario || nombre,
-        duenoTelefono: datos.telefonos?.[0] || telefono,
-        duenoEmail: datos.emails?.[0] || email,
-        ...extra
+        duenoNombre:     datos.propietario  || nombre,
+        duenoTelefono:   telefonos[0]       || telefono,
+        duenoEmail:      emails[0]          || email,
+        duenoTelefonos:  telefonos,
+        duenoEmails:     emails,
+        duenoRut:        datos.rut          || '',
+        duenoSociedades: Array.isArray(datos.sociedades) ? datos.sociedades.filter(Boolean).join(', ') : (datos.sociedades || ''),
+        supConstruida:   datos.superficieConstruida || null,
       });
 
-      alert(`✅ Datos extraídos:
-👤 ${datos.propietario || 'N/D'}
-📱 ${datos.telefonos?.join(', ') || 'N/D'}
-✉️ ${datos.emails?.join(', ') || 'N/D'}${datos.superficieConstruida ? `
-📐 ${datos.superficieConstruida} m²` : ''}`);
+      const resumen = [
+        `👤 ${datos.propietario || 'N/D'}`,
+        `🪪 ${datos.rut || 'N/D'}`,
+        `📱 ${telefonos.join(' | ') || 'N/D'}`,
+        `✉️ ${emails.join(' | ') || 'N/D'}`,
+        datos.superficieConstruida ? `📐 ${datos.superficieConstruida} m²` : null,
+        datos.sociedades?.length   ? `🏢 ${datos.sociedades.join(', ')}` : null,
+      ].filter(Boolean).join('\n');
+      alert('✅ Datos extraídos:\n\n' + resumen);
     } catch(err) {
       alert('Error procesando PDF: ' + err.message);
     } finally {
@@ -643,10 +658,25 @@ function DuenoEditor({ prop, onSave }) {
       {(prop.duenoNombre || prop.duenoTelefono || prop.duenoEmail) && (
         <div style={{ marginTop: 10, padding: '10px 12px', background: '#EFF6FF', borderRadius: 8, fontSize: 12 }}>
           {prop.duenoNombre && <div>👤 <strong>{prop.duenoNombre}</strong></div>}
-          {prop.duenoRut && <div style={{ marginTop: 2 }}>🪪 {prop.duenoRut}</div>}
-          {prop.duenoTelefono && <div style={{ marginTop: 2 }}>📱 {prop.duenoTelefono}</div>}
-          {prop.duenoEmail && <div style={{ marginTop: 2 }}>✉️ {prop.duenoEmail}</div>}
-          {prop.duenoSociedades && <div style={{ marginTop: 2, fontSize: 11, color: '#6B7280' }}>🏢 {prop.duenoSociedades}</div>}
+          {prop.duenoRut && <div style={{ marginTop: 4 }}>🪪 {prop.duenoRut}</div>}
+
+          {/* Todos los teléfonos */}
+          {(prop.duenoTelefonos?.length > 0 ? prop.duenoTelefonos : prop.duenoTelefono ? [prop.duenoTelefono] : []).map((t, i) => (
+            <div key={i} style={{ marginTop: 4 }}>
+              📱 <a href={`tel:${t}`} style={{ color: '#1E3A5F', textDecoration: 'none', fontWeight: 600 }}>{t}</a>
+              {i === 0 && prop.duenoTelefonos?.length > 1 && <span style={{ color: '#9CA3AF', marginLeft: 4 }}>+{prop.duenoTelefonos.length - 1} más</span>}
+            </div>
+          ))}
+
+          {/* Todos los emails */}
+          {(prop.duenoEmails?.length > 0 ? prop.duenoEmails : prop.duenoEmail ? [prop.duenoEmail] : []).map((em, i) => (
+            <div key={i} style={{ marginTop: 4 }}>
+              ✉️ <a href={`mailto:${em}`} style={{ color: '#1E3A5F', textDecoration: 'none', fontWeight: 600 }}>{em}</a>
+            </div>
+          ))}
+
+          {prop.supConstruida && <div style={{ marginTop: 4 }}>📐 {prop.supConstruida} m² construidos</div>}
+          {prop.duenoSociedades && <div style={{ marginTop: 4, color: '#6B7280' }}>🏢 {prop.duenoSociedades}</div>}
         </div>
       )}
     </div>

@@ -43,7 +43,7 @@ const REPORTES_MERCADO = [
 ];
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getPropiedades, addPropiedad, updatePropiedad, deletePropiedad } from './services/firebase';
+import { getPropiedades, addPropiedad, updatePropiedad, deletePropiedad, loginConGoogle, logout, onUsuarioCambia, esCorreoAutorizado } from './services/firebase';
 import { parsearDireccion, buscarEnSII } from './services/sii';
 
 const ESTADOS = [
@@ -67,6 +67,7 @@ export default function App() {
   const [input, setInput]         = useState('');
   const [log, setLog]             = useState([]);
   const [selected, setSelected]   = useState(null);
+  const [usuario, setUsuario]       = useState(undefined); // undefined=cargando, null=no auth
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,6 +77,13 @@ export default function App() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const unsub = onUsuarioCambia(user => {
+      setUsuario(user);
+    });
+    return unsub;
+  }, []);
 
   // ── métricas ──────────────────────────────
   const m = {
@@ -156,11 +164,52 @@ export default function App() {
   };
 
   // ── RENDER ────────────────────────────────
+  // Cargando estado de auth
+  if (usuario === undefined) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB' }}>
+        <div style={{ color: '#9CA3AF', fontSize: 14 }}>Cargando...</div>
+      </div>
+    );
+  }
+
+  // No autenticado o correo no autorizado
+  if (!usuario || !esCorreoAutorizado(usuario.email)) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F9FAFB', padding: 24 }}>
+        <div style={{ background: 'white', borderRadius: 16, padding: 40, maxWidth: 380, width: '100%', textAlign: 'center', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🏠</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#1E3A5F', marginBottom: 8 }}>BG Propiedades</div>
+          <div style={{ fontSize: 14, color: '#6B7280', marginBottom: 32 }}>
+            {usuario && !esCorreoAutorizado(usuario.email)
+              ? `❌ ${usuario.email} no tiene acceso. Contacta a Andrés.`
+              : 'Ingresa con tu cuenta de Google para continuar.'
+            }
+          </div>
+          {usuario && !esCorreoAutorizado(usuario.email) ? (
+            <button onClick={() => logout()} style={{ width: '100%', padding: '12px 20px', background: '#6B7280', color: 'white', border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+              Salir y usar otra cuenta
+            </button>
+          ) : (
+            <button onClick={async () => { try { await loginConGoogle(); } catch(e) { console.error(e); } }}
+              style={{ width: '100%', padding: '12px 20px', background: '#1E3A5F', color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20H24v8h11.3C33.7 33.2 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20c11 0 19.7-8 19.7-20 0-1.3-.1-2.7-.1-4z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34 6.5 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.9 13.5-5l-6.2-5.2C29.4 35.5 26.8 36 24 36c-5.2 0-9.6-2.8-11.3-7l-6.5 5C9.7 39.7 16.3 44 24 44z"/><path fill="#1976D2" d="M43.6 20H24v8h11.3c-.8 2.3-2.3 4.2-4.3 5.5l6.2 5.2C40.7 35.6 44 30.3 44 24c0-1.3-.1-2.7-.4-4z"/></svg>
+              Ingresar con Google
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.app}>
       {/* HEADER */}
       <header style={S.header}>
         <span style={S.logo}>🏠 BG Propiedades</span>
+        <button onClick={() => logout()} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white', padding: '6px 12px', borderRadius: 8, fontSize: 12, cursor: 'pointer', fontWeight: 500 }}>
+          Salir
+        </button>
       </header>
 
       {/* NAV */}

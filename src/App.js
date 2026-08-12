@@ -130,14 +130,49 @@ export default function App() {
       const sii = await buscarEnSII(calle, numero, codigoComuna);
       const data = { direccion: texto, calle, numero, comuna, rol: sii?.rol||null, avaluoFiscal: sii?.avaluoFiscal||null, avaluoAfecto: sii?.avaluoAfecto||null, direccionSII: sii?.direccionSII||null, destino: sii?.destino||null, supTerreno: sii?.supTerreno||null, supConstruida: sii?.supConstruida||null, rangoSuperficie: sii?.rangoSuperficie||null, ubicacion: sii?.ubicacion||null, periodo: sii?.periodo||null, arriendoUF: null };
       try {
-        await addPropiedad(data);
-        setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: sii?.rol ? 'ok' : 'warn', msg: sii?.rol ? `ROL: ${sii.rol}` : 'Sin ROL en SII' } : l));
+        const docId = await addPropiedad(data);
+        if (!sii?.rol) {
+          // Sin ROL: guardar igual y mostrar opción para ingresarlo manualmente
+          setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'warn', msg: 'Sin ROL en SII', sinRol: true, propiedadId: docId, comuna } : l));
+        } else {
+          setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'ok', msg: `ROL: ${sii.rol}` } : l));
+        }
       } catch {
         setLog(prev => prev.map((l, idx) => idx === i ? { ...l, estado: 'error', msg: 'Error al guardar' } : l));
       }
       if (i < lines.length - 1) await new Promise(r => setTimeout(r, 800));
     }
     setInput(''); setProc(false); await load();
+  };
+
+  const buscarPorRol = async (logIdx, propiedadId, rolInput, comuna) => {
+    if (!rolInput.match(/^\d+-\d+$/)) {
+      alert('Formato incorrecto. Usa MANZANA-PREDIO, ej: 387-21');
+      return;
+    }
+    setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'buscando', msg: 'Consultando por ROL...' } : l));
+    try {
+      const params = new URLSearchParams({ rol: rolInput, comuna });
+      const res = await fetch(`/api/buscar-rol?${params}`);
+      const sii = await res.json();
+      if (!sii?.rol) throw new Error('ROL no encontrado en SII');
+      await updatePropiedad(propiedadId, {
+        rol: sii.rol,
+        avaluoFiscal: sii.avaluoFiscal || null,
+        avaluoAfecto: sii.avaluoAfecto || null,
+        direccionSII: sii.direccionSII || null,
+        destino: sii.destino || null,
+        supTerreno: sii.supTerreno || null,
+        supConstruida: sii.supConstruida || null,
+        rangoSuperficie: sii.rangoSuperficie || null,
+        ubicacion: sii.ubicacion || null,
+        periodo: sii.periodo || null,
+      });
+      setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'ok', msg: `ROL ${sii.rol} encontrado`, sinRol: false } : l));
+      await load();
+    } catch(e) {
+      setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'error', msg: 'Error: ' + e.message } : l));
+    }
   };
 
   const cambiarStatus = async (id, status) => {
@@ -289,13 +324,16 @@ export default function App() {
             {log.length > 0 && (
               <div style={{ marginTop: 16 }}>
                 {log.map((l, i) => (
-                  <div key={i} style={{ ...S.logItem, background: l.estado === 'ok' ? '#EDFAF4' : l.estado === 'error' ? '#FDF2F2' : C.bg, borderColor: l.estado === 'ok' ? '#A7F3D0' : l.estado === 'error' ? '#FECACA' : C.border }}>
+                  <div key={i} style={{ ...S.logItem, background: l.estado === 'ok' ? '#EDFAF4' : l.estado === 'error' ? '#FDF2F2' : l.estado === 'warn' ? '#FFFBEB' : C.bg, borderColor: l.estado === 'ok' ? '#A7F3D0' : l.estado === 'error' ? '#FECACA' : l.estado === 'warn' ? '#FCD34D' : C.border }}>
                     <div style={{ ...S.logIcon, background: l.estado === 'ok' ? C.success : l.estado === 'error' ? C.danger : l.estado === 'warn' ? C.gold : C.textSm }}>
                       {l.estado === 'ok' ? '✓' : l.estado === 'error' ? '✕' : l.estado === 'warn' ? '!' : '…'}
                     </div>
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{l.texto}</div>
                       <div style={{ fontSize: 12, color: C.textMd, marginTop: 2 }}>{l.msg}</div>
+                      {l.sinRol && l.propiedadId && (
+                        <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna)} />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -681,6 +719,27 @@ function ArriendoEditor({ prop, onSave }) {
         </button>
       </div>
       {prop.arriendoUF && <div style={{ marginTop: 8, fontSize: 13, color: C.success, fontWeight: 600 }}>Arriendo registrado: {prop.arriendoUF} UF/mes</div>}
+    </div>
+  );
+}
+
+function RolManualInput({ onBuscar }) {
+  const [rol, setRol] = React.useState('');
+  return (
+    <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
+      <input
+        style={{ flex: 1, padding: '6px 10px', border: `1px solid ${C.gold}`, borderRadius: 7, fontSize: 12, outline: 'none', color: C.text }}
+        placeholder="ROL manual, ej: 387-21"
+        value={rol}
+        onChange={e => setRol(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && rol && onBuscar(rol)}
+      />
+      <button
+        style={{ padding: '6px 12px', background: C.navy, color: 'white', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        onClick={() => rol && onBuscar(rol)}
+      >
+        Buscar por ROL
+      </button>
     </div>
   );
 }

@@ -5,8 +5,8 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { calle, numero, comuna } = req.query;
-  if (!calle || !comuna) return res.status(400).json({ error: 'Faltan parametros' });
+  // Soporta búsqueda por dirección O por ROL directo
+  const { calle, numero, comuna, rol: rolDirecto } = req.query;
 
   function normalizar(str) {
     return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
@@ -56,16 +56,13 @@ module.exports = async function handler(req, res) {
     'san joaquin': '15128', 'san ramon': '15129',
   };
 
-  const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
-
   try {
-    // Paso 1: Cookie de sesión
+    // ── Paso 1: Cookie de sesión ──────────────────────────────────────────
     const sessionRes = await fetchGet(
       'https://www4.sii.cl/mapasui/internet/index.html',
       { 'User-Agent': UA, 'Accept': 'text/html,*/*', 'Accept-Language': 'es-419,es;q=0.9' }
     );
     const cookies = sessionRes.cookies.map(c => c.split(';')[0]).join('; ');
-
     const baseHdrs = {
       'Accept': 'application/json, text/plain, */*',
       'Accept-Language': 'es-419,es;q=0.9',
@@ -80,24 +77,104 @@ module.exports = async function handler(req, res) {
       'Sec-Fetch-Site': 'same-origin',
     };
 
-    // Paso 2: Buscar predios por dirección
-    const r1 = await fetchPost('www4.sii.cl',
-      '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
-      {
-        metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPrediosDireccion", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
-        data: { rolDireccion: { comuna: codigoComuna, nombreComuna: comuna.toUpperCase(), calle, numeroCalleStr: numero || '', detalle: 0 }, servicios: [] }
-      }, baseHdrs
-    );
+    // ── MODO A: Búsqueda por ROL directo ─────────────────────────────────
+    if (rolDirecto) {
+      // ROL formato "MANZANA-PREDIO", ej: "387-21"
+      const partes = rolDirecto.split('-');
+      if (partes.length !== 2) return res.status(400).json({ error: 'ROL debe tener formato MANZANA-PREDIO, ej: 387-21' });
 
-    const j1 = JSON.parse(r1.body);
-    const predios = j1?.data || [];
+      const codigoComuna = COMUNAS[normalizar(comuna || 'nunoa')] || '15105';
+      const manzana = parseInt(partes[0]);
+      const predioNum = parseInt(partes[1]);
+
+      const r2 = await fetchPost('www4.sii.cl',
+        '/mapasui/services/data/mapasFacadeService/getPredioNacional',
+        {
+          metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioNacional", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+          data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
+        }, baseHdrs
+      );
+      const j2 = JSON.parse(r2.body);
+      const d = j2?.data || {};
+      if (!d.rol) return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII' });
+
+      // Superficie
+      let supTerreno = null, supConstruida = null;
+      const predioPublicadoId = d.predioPublicado?.id;
+      if (predioPublicadoId) {
+        try {
+          const r4 = await fetchPost('www4.sii.cl',
+            '/mapasui/services/data/mapasFacadeService/getPredioPublicado',
+            { metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioPublicado", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+              data: { idPredioPublicado: predioPublicadoId, servicios: [] }
+            }, baseHdrs
+          );
+          const dp = JSON.parse(r4.body)?.data;
+          if (dp) {
+            supTerreno   = (dp.supTerreno  && dp.supTerreno  > 0) ? dp.supTerreno  : null;
+            supConstruida = (dp.supConsMt2 && dp.supConsMt2  > 0) ? dp.supConsMt2  :
+                            (dp.supConstruida && dp.supConstruida > 0) ? dp.supConstruida : null;
+          }
+        } catch(e) {}
+      }
+
+      return res.status(200).json({
+        rol: d.rol, manzana, predio: predioNum,
+        avaluoFiscal: d.valorTotal || null,
+        avaluoAfecto: d.valorAfecto || null,
+        direccionSII: (d.direccion || '').trim(),
+        destino: d.destinoDescripcion || null,
+        ubicacion: d.ubicacion || null,
+        supTerreno, supConstruida,
+        rangoSuperficie: d.datosAh?.rangoSuperficie?.trim() || null,
+        periodo: d.periodo || null,
+      });
+    }
+
+    // ── MODO B: Búsqueda por dirección con reintentos ─────────────────────
+    if (!calle || !comuna) return res.status(400).json({ error: 'Faltan parametros' });
+
+    const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
+
+    // Generar variantes de la calle para reintentar si falla:
+    // 1. Nombre completo ("FERNANDO MARQUEZ DE LA PLATA")
+    // 2. Sin palabras funcionales del final ("DE LA PLATA" → drop) 
+    // 3. Solo primeras 2 palabras ("FERNANDO MARQUEZ")
+    // 4. Solo primera palabra ("FERNANDO")
+    const palabras = calle.trim().split(/\s+/);
+    const variantes = [];
+    variantes.push(calle.trim()); // original
+    if (palabras.length > 2) variantes.push(palabras.slice(0, palabras.length - 1).join(' ')); // sin última palabra
+    if (palabras.length > 2) variantes.push(palabras.slice(0, 2).join(' ')); // primeras 2 palabras
+    // Deduplicar
+    const variantesUnicas = [...new Set(variantes)];
+
+    let predios = [];
+    let varianteUsada = calle;
+
+    for (const variante of variantesUnicas) {
+      const r1 = await fetchPost('www4.sii.cl',
+        '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
+        {
+          metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPrediosDireccion", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+          data: { rolDireccion: { comuna: codigoComuna, nombreComuna: comuna.toUpperCase(), calle: variante, numeroCalleStr: numero || '', detalle: 0 }, servicios: [] }
+        }, baseHdrs
+      );
+      const j1 = JSON.parse(r1.body);
+      predios = j1?.data || [];
+      if (predios.length > 0) {
+        varianteUsada = variante;
+        break;
+      }
+    }
+
     if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
 
     const predio = predios[0];
     const manzana = predio.manzana;
     const predioNum = predio.predio;
 
-    // Paso 3: Obtener datos completos con getPredioNacional
+    // Paso 3: Datos completos
     const r2 = await fetchPost('www4.sii.cl',
       '/mapasui/services/data/mapasFacadeService/getPredioNacional',
       {
@@ -105,39 +182,25 @@ module.exports = async function handler(req, res) {
         data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
       }, baseHdrs
     );
-
     const j2 = JSON.parse(r2.body);
     const d = j2?.data || {};
 
-    // Paso 4: Obtener superficie con getServicioPredio
-    const r3 = await fetchPost('www4.sii.cl',
-      '/mapasui/services/data/mapasFacadeService/getServicioPredio',
-      {
-        metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getServicioPredio", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
-        data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
-      }, baseHdrs
-    );
-
-    // Paso 4: Obtener superficie desde getPredioPublicado
-    let supTerreno = null;
-    let supConstruida = null;
+    // Superficie
+    let supTerreno = null, supConstruida = null;
     const predioPublicadoId = d.predioPublicado?.id;
-
     if (predioPublicadoId) {
       try {
         const r4 = await fetchPost('www4.sii.cl',
           '/mapasui/services/data/mapasFacadeService/getPredioPublicado',
-          {
-            metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioPublicado", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+          { metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioPublicado", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
             data: { idPredioPublicado: predioPublicadoId, servicios: [] }
           }, baseHdrs
         );
-        const j4 = JSON.parse(r4.body);
-        const dp = j4?.data;
+        const dp = JSON.parse(r4.body)?.data;
         if (dp) {
-          supTerreno = (dp.supTerreno && dp.supTerreno > 0) ? dp.supTerreno : null;
-          supConstruida = (dp.supConsMt2 && dp.supConsMt2 > 0) ? dp.supConsMt2 : 
-                         (dp.supConstruida && dp.supConstruida > 0) ? dp.supConstruida : null;
+          supTerreno    = (dp.supTerreno  && dp.supTerreno  > 0) ? dp.supTerreno  : null;
+          supConstruida = (dp.supConsMt2  && dp.supConsMt2  > 0) ? dp.supConsMt2  :
+                          (dp.supConstruida && dp.supConstruida > 0) ? dp.supConstruida : null;
         }
       } catch(e) {}
     }
@@ -150,15 +213,13 @@ module.exports = async function handler(req, res) {
       direccionSII: (d.direccion || predio.direccion || '').trim(),
       destino: d.destinoDescripcion || predio.destinoDescripcion || null,
       ubicacion: d.ubicacion || null,
-      supTerreno,
-      supConstruida,
+      supTerreno, supConstruida,
       coordenadas: d.ubicacionX ? { lat: d.ubicacionX, lng: d.ubicacionY } : null,
-      areaHomogenea: d.ah || null,
       rangoSuperficie: d.datosAh?.rangoSuperficie?.trim() || null,
       predioPublicadoId: d.predioPublicado?.id || null,
       periodo: d.periodo || null,
-      manzana,
-      predio: predioNum,
+      manzana, predio: predioNum,
+      calleUsada: varianteUsada, // para debug: qué variante funcionó
     });
 
   } catch(e) {

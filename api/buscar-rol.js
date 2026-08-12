@@ -4,7 +4,8 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { calle, numero, comuna, rol: rolDirecto, manzana: manzanaElegida, predio: predioElegido } = req.query;
+  const { calle, numero, num, comuna, rol: rolDirecto, manzana: manzanaElegida, predio: predioElegido } = req.query;
+  const numeroValido = numero || num || '';
 
   function normalizar(str) {
     return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
@@ -207,12 +208,12 @@ module.exports = async function handler(req, res) {
     }
 
     // Variantes de número: con/sin cero inicial
-    const numerosVariantes = [numero || ''];
-    if (numero && numero.length <= 3 && !numero.startsWith('0')) {
-      numerosVariantes.push('0' + numero);
+    const numerosVariantes = [numeroValido || ''];
+    if (numeroValido && numeroValido.length <= 3 && !numeroValido.startsWith('0')) {
+      numerosVariantes.push('0' + numeroValido);
     }
-    if (numero && numero.startsWith('0')) {
-      numerosVariantes.push(numero.slice(1));
+    if (numeroValido && numeroValido.startsWith('0')) {
+      numerosVariantes.push(numeroValido.slice(1));
     }
 
     console.log('[buscar-rol] variantes calle:', variantesCalle, '| numeros:', numerosVariantes, '| codigo comuna:', codigoComuna);

@@ -71,11 +71,7 @@ export default function App() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const data = await getPropiedades();
-      console.log('📊 STATUS de propiedades:', data.map(p => ({ id: p.id.slice(-4), status: p.status, dir: p.direccion?.slice(0,20) })));
-      setProps(data);
-    }
+    try { setProps(await getPropiedades()); }
     catch(e) { console.error(e); }
     finally { setLoading(false); }
   }, []);

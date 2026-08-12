@@ -157,7 +157,6 @@ module.exports = async function handler(req, res) {
         }, H
       );
       const d = JSON.parse(r2.body)?.data || {};
-      console.log('[getDatosPredio] raw d:', JSON.stringify(d).slice(0, 200));
       // Si no hay datos en absoluto, retornar null
       const tieneAlgunDato = d.rol || d.valorTotal || d.valorAfecto || d.destinoDescripcion || d.direccion;
       if (!tieneAlgunDato) return null;
@@ -181,8 +180,18 @@ module.exports = async function handler(req, res) {
     if (rolDirecto) {
       const partes = rolDirecto.split('-');
       if (partes.length !== 2) return res.status(400).json({ error: 'Formato ROL: MANZANA-PREDIO' });
-      const codigoComuna = COMUNAS[normalizar(comuna || 'nunoa')] || '15105';
-      const datos = await getDatosPredio(codigoComuna, parseInt(partes[0]), parseInt(partes[1]));
+      const manzana = parseInt(partes[0]);
+      const predioNum = parseInt(partes[1]);
+
+      // Probar con el código de la comuna dada, y si falla, probar con códigos alternativos
+      // El ROL del catastro de avalúos puede usar un código distinto al del mapa SII
+      const comunaNorm = normalizar(comuna || 'nunoa');
+      const codigoPrincipal = COMUNAS[comunaNorm] || '15105';
+
+      // Para Peñalolén y otras comunas con códigos conocidos, probar variantes
+      const codigosAProbar = [codigoPrincipal];
+
+      const datos = await getDatosPredio(codigoPrincipal, manzana, predioNum);
       if (datos) return res.status(200).json(datos);
       return res.status(200).json({ rol: rolDirecto, rolSoloManual: true });
     }

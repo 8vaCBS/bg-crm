@@ -213,13 +213,21 @@ module.exports = async function handler(req, res) {
     // Comodín para condominios: el SII indexa casas internas bajo "CONDOMINIO" + número exterior
     variantesCalle.push('CONDOMINIO');
 
-    // Variantes de número: con/sin cero inicial
+    // Variantes de número
     const numerosVariantes = [numeroValido || ''];
     if (numeroValido && numeroValido.length <= 3 && !numeroValido.startsWith('0')) {
-      numerosVariantes.push('0' + numeroValido);
+      numerosVariantes.push('0' + numeroValido);       // 134 → 0134
     }
     if (numeroValido && numeroValido.startsWith('0')) {
-      numerosVariantes.push(numeroValido.slice(1));
+      numerosVariantes.push(numeroValido.slice(1));     // 0134 → 134
+    }
+    // Variante de número de matriz: para condominios el SII tiene el loteo macro
+    // Ej: 10691 → 10600 (entrada del condominio, número de la manzana original)
+    if (numeroValido && numeroValido.length > 3) {
+      const numeroMatriz = numeroValido.substring(0, 3) + '00';
+      if (!numerosVariantes.includes(numeroMatriz)) {
+        numerosVariantes.push(numeroMatriz);
+      }
     }
 
     console.log('[buscar-rol] variantes calle:', variantesCalle, '| numeros:', numerosVariantes, '| codigo comuna:', codigoComuna);

@@ -176,6 +176,49 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // ── MODO C: Búsqueda por manzana+predio específico (cuando usuario elige entre múltiples) ──
+    const { manzana: manzanaElegida, predio: predioElegido } = req.query;
+    if (manzanaElegida && predioElegido) {
+      const codigoComuna = COMUNAS[normalizar(comuna || 'nunoa')] || '15105';
+      const manzana = parseInt(manzanaElegida);
+      const predioNum = parseInt(predioElegido);
+
+      const r2 = await fetchPost('www4.sii.cl',
+        '/mapasui/services/data/mapasFacadeService/getPredioNacional',
+        { metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioNacional", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+          data: { predio: { comuna: parseInt(codigoComuna), manzana, predio: predioNum }, servicios: [] }
+        }, baseHdrs
+      );
+      const j2 = JSON.parse(r2.body);
+      const d = j2?.data || {};
+      if (!d.rol) return res.status(200).json({ rol: null, error: 'Predio no encontrado' });
+
+      let supTerreno = null, supConstruida = null;
+      const ppId = d.predioPublicado?.id;
+      if (ppId) {
+        try {
+          const r4 = await fetchPost('www4.sii.cl',
+            '/mapasui/services/data/mapasFacadeService/getPredioPublicado',
+            { metaData: { namespace: "cl.sii.sdi.lob.bbrr.mapas.data.api.interfaces.MapasFacadeService/getPredioPublicado", conversationId: "UNAUTHENTICATED-CALL", transactionId: `bg-${Date.now()}` },
+              data: { idPredioPublicado: ppId, servicios: [] }
+            }, baseHdrs
+          );
+          const dp = JSON.parse(r4.body)?.data;
+          if (dp) {
+            supTerreno    = dp.supTerreno  > 0 ? dp.supTerreno  : null;
+            supConstruida = dp.supConsMt2  > 0 ? dp.supConsMt2  : dp.supConstruida > 0 ? dp.supConstruida : null;
+          }
+        } catch(e) {}
+      }
+      return res.status(200).json({
+        rol: d.rol, manzana, predio: predioNum,
+        avaluoFiscal: d.valorTotal || null, avaluoAfecto: d.valorAfecto || null,
+        direccionSII: (d.direccion || '').trim(), destino: d.destinoDescripcion || null,
+        ubicacion: d.ubicacion || null, supTerreno, supConstruida,
+        rangoSuperficie: d.datosAh?.rangoSuperficie?.trim() || null, periodo: d.periodo || null,
+      });
+    }
+
     // ── MODO B: Búsqueda por dirección con reintentos ─────────────────────
     if (!calle || !comuna) return res.status(400).json({ error: 'Faltan parametros' });
 
@@ -257,6 +300,24 @@ module.exports = async function handler(req, res) {
     }
 
     if (!predios.length) return res.status(200).json({ rol: null, error: 'Sin resultados en SII' });
+
+    // Si hay múltiples predios en la misma dirección, devolverlos todos para que
+    // el frontend muestre opciones al usuario
+    if (predios.length > 1) {
+      // Obtener destino de cada predio para mostrar descripción útil
+      const resumen = predios.map(p => ({
+        rol:     p.rol,
+        manzana: p.manzana,
+        predio:  p.predio,
+        destino: p.destinoDescripcion || null,
+        direccion: (p.direccion || '').trim(),
+      }));
+      return res.status(200).json({
+        multiplesResultados: true,
+        predios: resumen,
+        rol: null,
+      });
+    }
 
     const predio = predios[0];
     const manzana = predio.manzana;

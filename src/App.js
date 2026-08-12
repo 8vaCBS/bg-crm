@@ -136,6 +136,21 @@ export default function App() {
       const { calle, numero, comuna, codigoComuna } = parsearDireccion(texto);
       setLog(prev => [...prev, { texto, estado: 'buscando', msg: 'Consultando SII...' }]);
       const sii = await buscarEnSII(calle, numero, codigoComuna);
+
+      // Múltiples predios en la misma dirección — guardar y pedir al usuario que elija
+      if (sii?.multiplesResultados) {
+        const docId = await addPropiedad({ direccion: texto, calle, numero, comuna, arriendoUF: null });
+        setLog(prev => prev.map((l, idx) => idx === i ? {
+          ...l, estado: 'warn',
+          msg: `${sii.predios.length} predios encontrados en esta dirección`,
+          multiplesResultados: true,
+          predios: sii.predios,
+          propiedadId: docId,
+          comuna,
+        } : l));
+        continue;
+      }
+
       const data = { direccion: texto, calle, numero, comuna, rol: sii?.rol||null, avaluoFiscal: sii?.avaluoFiscal||null, avaluoAfecto: sii?.avaluoAfecto||null, direccionSII: sii?.direccionSII||null, destino: sii?.destino||null, supTerreno: sii?.supTerreno||null, supConstruida: sii?.supConstruida||null, rangoSuperficie: sii?.rangoSuperficie||null, ubicacion: sii?.ubicacion||null, periodo: sii?.periodo||null, arriendoUF: null };
       try {
         const docId = await addPropiedad(data);
@@ -150,6 +165,30 @@ export default function App() {
       if (i < lines.length - 1) await new Promise(r => setTimeout(r, 800));
     }
     setInput(''); setProc(false); await load();
+  };
+
+  const elegirPredioDe = async (logIdx, propiedadId, predio, comuna) => {
+    setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'buscando', msg: 'Obteniendo datos del predio...' } : l));
+    try {
+      const params = new URLSearchParams({ manzana: predio.manzana, predio: predio.predio, comuna });
+      const res = await fetch(`/api/buscar-rol?${params}`);
+      const sii = await res.json();
+      if (!sii?.rol) throw new Error('No se obtuvieron datos');
+      await updatePropiedad(propiedadId, {
+        rol: sii.rol, avaluoFiscal: sii.avaluoFiscal||null, avaluoAfecto: sii.avaluoAfecto||null,
+        direccionSII: sii.direccionSII||null, destino: sii.destino||null,
+        supTerreno: sii.supTerreno||null, supConstruida: sii.supConstruida||null,
+        rangoSuperficie: sii.rangoSuperficie||null, ubicacion: sii.ubicacion||null, periodo: sii.periodo||null,
+      });
+      setLog(prev => prev.map((l, i) => i === logIdx ? {
+        ...l, estado: 'ok',
+        msg: `ROL: ${sii.rol} · ${sii.destino || ''}`,
+        multiplesResultados: false,
+      } : l));
+      await load();
+    } catch(e) {
+      setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'error', msg: 'Error: ' + e.message } : l));
+    }
   };
 
   const toggleSeleccion = (id) => {
@@ -394,6 +433,24 @@ export default function App() {
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{l.texto}</div>
                       <div style={{ fontSize: 12, color: C.textMd, marginTop: 2 }}>{l.msg}</div>
+                      {l.multiplesResultados && l.predios && (
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ fontSize: 11, color: C.textMd, marginBottom: 6, fontWeight: 600 }}>
+                            ¿Cuál es el predio correcto?
+                          </div>
+                          {l.predios.map((p, pi) => (
+                            <button key={pi}
+                              onClick={() => elegirPredioDe(i, l.propiedadId, p, l.comuna)}
+                              style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 5,
+                                padding: '8px 12px', background: C.white, border: `1px solid ${C.border}`,
+                                borderRadius: 8, fontSize: 12, cursor: 'pointer', color: C.text }}>
+                              <strong>ROL {p.rol}</strong>
+                              {p.destino && <span style={{ color: C.textMd }}> · {p.destino}</span>}
+                              {p.direccion && <span style={{ color: C.textSm }}> · {p.direccion}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {l.sinRol && l.propiedadId && (
                         <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna, l.texto)} />
                       )}

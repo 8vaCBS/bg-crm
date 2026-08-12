@@ -43,6 +43,49 @@ module.exports = async function handler(req, res) {
     });
   }
 
+  // Códigos de región y comuna para zeus.sii.cl (sistema distinto al mapa)
+  const COMUNAS_ZEUS = {
+    'nunoa': '155', 'providencia': '155', 'las condes': '155',
+    'penalolen': '155', 'santiago': '155', 'vitacura': '155',
+    'la reina': '155', 'macul': '155', 'san miguel': '155',
+    'la florida': '155', 'maipu': '155', 'huechuraba': '155',
+    'independencia': '155', 'recoleta': '155', 'lo barnechea': '155',
+    'estacion central': '155', 'cerrillos': '155', 'pudahuel': '155',
+    'quilicura': '155', 'renca': '155', 'conchali': '155',
+    'la cisterna': '155', 'la granja': '155', 'lo espejo': '155',
+    'lo prado': '155', 'pedro aguirre cerda': '155',
+    'san joaquin': '155', 'san ramon': '155',
+  };
+  // Códigos de comuna para zeus.sii.cl (distintos al mapa SII)
+  const ZEUS_COMUNA_CODES = {
+    'santiago': '13101', 'nunoa': '13120', 'providencia': '13123',
+    'las condes': '13114', 'vitacura': '13132', 'la reina': '13113',
+    'macul': '13118', 'la florida': '13110', 'maipu': '13119',
+    'san miguel': '13126', 'penalolen': '13121', 'lo barnechea': '13116',
+    'huechuraba': '13108', 'independencia': '13109', 'recoleta': '13125',
+    'estacion central': '13106', 'cerrillos': '13102', 'pudahuel': '13124',
+    'quilicura': '13120b', 'renca': '13127', 'conchali': '13103',
+    'la cisterna': '13111', 'la granja': '13112', 'lo espejo': '13117',
+    'lo prado': '13115', 'pedro aguirre cerda': '13122',
+    'san joaquin': '13128', 'san ramon': '13129',
+  };
+
+  // Parsea el HTML de zeus.sii.cl para extraer datos del bien raiz
+  function parsearZeus(html) {
+    const result = {};
+    // Extraer numeros de tablas de avaluo (busca patrones de montos en CLP)
+    const montos = [...html.matchAll(/([\d]{1,3}(?:[.,][\d]{3})+)/g)].map(m => parseInt(m[1].replace(/[.,]/g, '')));
+    if (montos.length >= 1) result.avaluoFiscal = montos[0];
+    if (montos.length >= 2) result.avaluoAfecto = montos[1];
+    // ROL
+    const rolMatch = html.match(/(\d{3,4}-\d{1,3})/);
+    if (rolMatch) result.rol = rolMatch[1];
+    // Destino: buscar texto tipo CASA, DEPARTAMENTO, etc
+    const destMatch = html.match(/(CASA|DEPARTAMENTO|SITIO|OFICINA|PARCELA|BODEGA|LOCAL|COMERCIO|INDUSTRIA)/i);
+    if (destMatch) result.destino = destMatch[1].toUpperCase();
+    return result;
+  }
+
   const COMUNAS = {
     'nunoa': '15105', 'providencia': '15123', 'las condes': '15114',
     'penalolen': '15121', 'santiago': '15101', 'vitacura': '15132',
@@ -96,9 +139,37 @@ module.exports = async function handler(req, res) {
       );
       const j2 = JSON.parse(r2.body);
       const d = j2?.data || {};
-      if (!d.rol) return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII' });
 
-      // Superficie
+      // Si el mapa SII no retorna datos, intentar con zeus.sii.cl por ROL directo
+      if (!d.rol) {
+        try {
+          const comunaNorm = normalizar(comuna || 'nunoa');
+          const zeusCode = ZEUS_COMUNA_CODES[comunaNorm] || '13120';
+          // zeus.sii.cl acepta GET con RGN=13&CNT=CODIGO&ROL=MANZANA-PREDIO
+          const zeusUrl = `https://zeus.sii.cl/avalu_cgi/br/brc110.sh?RGN=13&CNT=${zeusCode}&ROL=${rolDirecto}&BL_TIPO=ALL`;
+          const zeusRes = await fetchGet(zeusUrl, {
+            'User-Agent': UA,
+            'Accept': 'text/html',
+            'Referer': 'https://zeus.sii.cl/avalu_cgi/br/brc110.sh',
+          });
+          if (zeusRes.status === 200 && zeusRes.body.includes(rolDirecto)) {
+            const zeus = parsearZeus(zeusRes.body);
+            if (zeus.avaluoFiscal || zeus.rol) {
+              return res.status(200).json({
+                rol: zeus.rol || rolDirecto,
+                avaluoFiscal: zeus.avaluoFiscal || null,
+                avaluoAfecto: zeus.avaluoAfecto || null,
+                direccionSII: zeus.direccionSII || null,
+                destino: zeus.destino || null,
+                fuenteZeus: true,
+              });
+            }
+          }
+        } catch(eZeus) { console.log('zeus error:', eZeus.message); }
+        return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII' });
+      }
+
+      // Superficie desde mapa SII
       let supTerreno = null, supConstruida = null;
       const predioPublicadoId = d.predioPublicado?.id;
       if (predioPublicadoId) {
@@ -111,8 +182,8 @@ module.exports = async function handler(req, res) {
           );
           const dp = JSON.parse(r4.body)?.data;
           if (dp) {
-            supTerreno   = (dp.supTerreno  && dp.supTerreno  > 0) ? dp.supTerreno  : null;
-            supConstruida = (dp.supConsMt2 && dp.supConsMt2  > 0) ? dp.supConsMt2  :
+            supTerreno    = (dp.supTerreno  && dp.supTerreno  > 0) ? dp.supTerreno  : null;
+            supConstruida = (dp.supConsMt2  && dp.supConsMt2  > 0) ? dp.supConsMt2  :
                             (dp.supConstruida && dp.supConstruida > 0) ? dp.supConstruida : null;
           }
         } catch(e) {}

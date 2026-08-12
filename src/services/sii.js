@@ -13,14 +13,16 @@ function normalizar(str) {
 
 export function parsearDireccion(texto) {
   const partes = texto.split(/,/).map(p => p.trim());
-  const comunaRaw = partes.length > 1 ? partes[partes.length - 1] : 'Nunoa';
+  // Si hay coma, lo último es la comuna; si no, no hay comuna definida
+  const tieneComa = texto.includes(',');
+  const comunaRaw = tieneComa ? partes[partes.length - 1] : '';
   const calleCompleta = partes[0] || texto;
   const m = calleCompleta.match(/^(.+?)\s+(\d+\w*)$/);
   return {
     calle: m ? m[1].trim() : calleCompleta,
     numero: m ? m[2] : '',
     comuna: comunaRaw,
-    codigoComuna: COMUNAS[normalizar(comunaRaw)] || '15105'
+    codigoComuna: COMUNAS[normalizar(comunaRaw)] || ''
   };
 }
 

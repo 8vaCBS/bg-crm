@@ -24,6 +24,7 @@ export const auth = getAuth(app);
 const CORREOS_AUTORIZADOS = [
   'barbaragutierrez9383@gmail.com',
   'barbaragc@bgadministradora.cl',
+  'bgpropiedadesgutierrez@gmail.com',
   'andres.lruiz@gmail.com',
 ];
 

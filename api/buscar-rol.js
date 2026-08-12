@@ -261,7 +261,6 @@ module.exports = async function handler(req, res) {
         );
         const j1 = JSON.parse(r1.body);
         predios = j1?.data || [];
-        console.log(`[SII] variante="${variante}" num="${num}" → ${predios.length} predios`);
         if (predios.length > 0) { varianteUsada = variante; break; }
       }
       if (predios.length > 0) break;

@@ -157,6 +157,7 @@ module.exports = async function handler(req, res) {
         }, H
       );
       const d = JSON.parse(r2.body)?.data || {};
+      console.log('[getDatosPredio] raw d:', JSON.stringify(d).slice(0, 200));
       // Si no hay datos en absoluto, retornar null
       const tieneAlgunDato = d.rol || d.valorTotal || d.valorAfecto || d.destinoDescripcion || d.direccion;
       if (!tieneAlgunDato) return null;

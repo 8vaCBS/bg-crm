@@ -650,16 +650,14 @@ export default function App() {
                   <FichaItem label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
                 </div>
 
-                {/* Editor manual de datos SII cuando no se obtuvieron automáticamente */}
-                {selected.rol && !selected.avaluoFiscal && (
-                  <DatosSIIEditor prop={selected} onSave={async (datos) => {
-                    try {
-                      await updatePropiedad(selected.id, datos);
-                      setSelected(prev => ({ ...prev, ...datos }));
-                      await load();
-                    } catch(e) { alert('Error guardando: ' + e.message); }
-                  }} />
-                )}
+                {/* Editor de datos SII — siempre visible para corregir o completar */}
+                <DatosSIIEditor prop={selected} onSave={async (datos) => {
+                  try {
+                    await updatePropiedad(selected.id, datos);
+                    setSelected(prev => ({ ...prev, ...datos }));
+                    await load();
+                  } catch(e) { alert('Error guardando: ' + e.message); }
+                }} />
               </div>
 
               {/* Propietario */}
@@ -919,6 +917,8 @@ function ArriendoEditor({ prop, onSave }) {
 }
 
 function DatosSIIEditor({ prop, onSave }) {
+  const tieneDatos = prop.avaluoFiscal || prop.avaluoAfecto;
+  const [abierto, setAbierto]           = React.useState(!tieneDatos);
   const [avaluoFiscal, setAvaluoFiscal] = React.useState(prop.avaluoFiscal ? String(prop.avaluoFiscal) : '');
   const [avaluoAfecto, setAvaluoAfecto] = React.useState(prop.avaluoAfecto ? String(prop.avaluoAfecto) : '');
   const [destino, setDestino]           = React.useState(prop.destino || '');
@@ -938,48 +938,64 @@ function DatosSIIEditor({ prop, onSave }) {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const bgColor   = tieneDatos ? C.bg    : '#FFFBEB';
+  const bdColor   = tieneDatos ? C.border : '#FCD34D';
+  const titleColor = tieneDatos ? C.textSm : '#92400E';
+  const btnBg     = tieneDatos ? C.navy   : '#92400E';
+
   return (
-    <div style={{ marginTop: 16, padding: '14px 16px', background: '#FFFBEB', border: `1px solid #FCD34D`, borderRadius: 10 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>
-        Ingresar datos manualmente
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 12px' }}>
-        <div>
-          <label style={S.formLabel}>Avalúo Total ($)</label>
-          <input style={S.formInput} type="text" value={avaluoFiscal}
-            onChange={e => setAvaluoFiscal(e.target.value)}
-            placeholder="ej: 278865088" />
+    <div style={{ marginTop: 16, border: `1px solid ${bdColor}`, borderRadius: 10, overflow: 'hidden' }}>
+      {/* Header colapsable */}
+      <button onClick={() => setAbierto(!abierto)}
+        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '11px 16px', background: bgColor, border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: titleColor, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          {tieneDatos ? 'Editar datos SII' : 'Ingresar datos manualmente'}
+        </span>
+        <span style={{ fontSize: 14, color: titleColor }}>{abierto ? '▲' : '▼'}</span>
+      </button>
+
+      {abierto && (
+        <div style={{ padding: '14px 16px', background: bgColor, borderTop: `1px solid ${bdColor}` }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 12px' }}>
+            <div>
+              <label style={S.formLabel}>Avalúo Total ($)</label>
+              <input style={S.formInput} type="text" value={avaluoFiscal}
+                onChange={e => setAvaluoFiscal(e.target.value)}
+                placeholder="ej: 278865088" />
+            </div>
+            <div>
+              <label style={S.formLabel}>Avalúo Afecto ($)</label>
+              <input style={S.formInput} type="text" value={avaluoAfecto}
+                onChange={e => setAvaluoAfecto(e.target.value)}
+                placeholder="ej: 217153518" />
+            </div>
+            <div>
+              <label style={S.formLabel}>Destino</label>
+              <input style={S.formInput} type="text" value={destino}
+                onChange={e => setDestino(e.target.value)}
+                placeholder="ej: HABITACIONAL" />
+            </div>
+            <div>
+              <label style={S.formLabel}>Período</label>
+              <input style={S.formInput} type="text" value={periodo}
+                onChange={e => setPeriodo(e.target.value)}
+                placeholder="ej: SEGUNDO SEMESTRE 2026" />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
+            <button onClick={guardar} disabled={saving}
+              style={{ ...S.btnPrimary, padding: '8px 18px', fontSize: 13, background: btnBg, width: 'auto' }}>
+              {saving ? 'Guardando...' : saved ? 'Guardado' : 'Guardar datos'}
+            </button>
+            <a href="https://www4.sii.cl/mapasui/internet/#/contenido/index.html"
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, color: C.navy, fontWeight: 600 }}>
+              Consultar en mapa SII →
+            </a>
+          </div>
         </div>
-        <div>
-          <label style={S.formLabel}>Avalúo Afecto ($)</label>
-          <input style={S.formInput} type="text" value={avaluoAfecto}
-            onChange={e => setAvaluoAfecto(e.target.value)}
-            placeholder="ej: 217153518" />
-        </div>
-        <div>
-          <label style={S.formLabel}>Destino</label>
-          <input style={S.formInput} type="text" value={destino}
-            onChange={e => setDestino(e.target.value)}
-            placeholder="ej: HABITACIONAL" />
-        </div>
-        <div>
-          <label style={S.formLabel}>Período</label>
-          <input style={S.formInput} type="text" value={periodo}
-            onChange={e => setPeriodo(e.target.value)}
-            placeholder="ej: SEGUNDO SEMESTRE 2026" />
-        </div>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, alignItems: 'center' }}>
-        <button onClick={guardar} disabled={saving}
-          style={{ ...S.btnPrimary, padding: '8px 18px', fontSize: 13, background: '#92400E', width: 'auto' }}>
-          {saving ? 'Guardando...' : saved ? 'Guardado' : 'Guardar datos'}
-        </button>
-        <a href={`https://www4.sii.cl/mapasui/internet/#/contenido/index.html`}
-          target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 12, color: C.navy, fontWeight: 600 }}>
-          Consultar en mapa SII →
-        </a>
-      </div>
+      )}
     </div>
   );
 }

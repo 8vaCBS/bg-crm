@@ -43,31 +43,37 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // Códigos de región y comuna para zeus.sii.cl (sistema distinto al mapa)
-  const COMUNAS_ZEUS = {
-    'nunoa': '155', 'providencia': '155', 'las condes': '155',
-    'penalolen': '155', 'santiago': '155', 'vitacura': '155',
-    'la reina': '155', 'macul': '155', 'san miguel': '155',
-    'la florida': '155', 'maipu': '155', 'huechuraba': '155',
-    'independencia': '155', 'recoleta': '155', 'lo barnechea': '155',
-    'estacion central': '155', 'cerrillos': '155', 'pudahuel': '155',
-    'quilicura': '155', 'renca': '155', 'conchali': '155',
-    'la cisterna': '155', 'la granja': '155', 'lo espejo': '155',
-    'lo prado': '155', 'pedro aguirre cerda': '155',
-    'san joaquin': '155', 'san ramon': '155',
-  };
-  // Códigos de comuna para zeus.sii.cl (distintos al mapa SII)
+  // Códigos de comuna para zeus.sii.cl — formato 5 dígitos "1XXXX"
+  // Fuente: PDFs oficiales SII (rol de avalúos por comuna)
   const ZEUS_COMUNA_CODES = {
-    'santiago': '13101', 'nunoa': '13120', 'providencia': '13123',
-    'las condes': '13114', 'vitacura': '13132', 'la reina': '13113',
-    'macul': '13118', 'la florida': '13110', 'maipu': '13119',
-    'san miguel': '13126', 'penalolen': '13121', 'lo barnechea': '13116',
-    'huechuraba': '13108', 'independencia': '13109', 'recoleta': '13125',
-    'estacion central': '13106', 'cerrillos': '13102', 'pudahuel': '13124',
-    'quilicura': '13120b', 'renca': '13127', 'conchali': '13103',
-    'la cisterna': '13111', 'la granja': '13112', 'lo espejo': '13117',
-    'lo prado': '13115', 'pedro aguirre cerda': '13122',
-    'san joaquin': '13128', 'san ramon': '13129',
+    'santiago':          '15101',
+    'nunoa':             '15105',
+    'providencia':       '15103',
+    'las condes':        '15102',
+    'vitacura':          '15110',
+    'la reina':          '15107',
+    'macul':             '15108',
+    'la florida':        '15106',
+    'maipu':             '15109',
+    'san miguel':        '15113',
+    'penalolen':         '15112',
+    'lo barnechea':      '15116',
+    'huechuraba':        '15117',
+    'independencia':     '15118',
+    'recoleta':          '15119',
+    'estacion central':  '15120',
+    'cerrillos':         '15121',
+    'pudahuel':          '15122',
+    'quilicura':         '15123',
+    'renca':             '15124',
+    'conchali':          '15125',
+    'la cisterna':       '15126',
+    'la granja':         '15127',
+    'lo espejo':         '15128',
+    'lo prado':          '15129',
+    'pedro aguirre cerda': '15130',
+    'san joaquin':       '15131',
+    'san ramon':         '15132',
   };
 
   // Parsea el HTML de zeus.sii.cl para extraer datos del bien raiz

@@ -2,7 +2,8 @@ const https = require('https');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+
   function fetchGet(url, hdrs) {
     return new Promise((resolve, reject) => {
       const req = https.get(url, { headers: hdrs }, (r) => {
@@ -11,22 +12,20 @@ module.exports = async function handler(req, res) {
         r.on('end', () => resolve({ status: r.statusCode, body: Buffer.concat(chunks).toString() }));
       });
       req.on('error', reject);
-      req.setTimeout(12000, () => { req.destroy(); reject(new Error('timeout')); });
+      req.setTimeout(15000, () => { req.destroy(); reject(new Error('timeout')); });
     });
   }
 
-  const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
-  
-  // Obtener el formulario con los códigos de comunas
-  const r = await fetchGet('https://zeus.sii.cl/avalu_cgi/br/brc110.sh?RGN=13', {
+  const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  // Probar ROL 387-21 en Providencia con código 15103
+  const url = `https://zeus.sii.cl/avalu_cgi/br/brc110.sh?RGN=13&CNT=15103&ROL=387-21&BL_TIPO=ALL`;
+  const r = await fetchGet(url, {
     'User-Agent': UA,
-    'Accept': 'text/html',
+    'Accept': 'text/html,application/xhtml+xml',
+    'Accept-Language': 'es-419,es;q=0.9',
+    'Referer': 'https://zeus.sii.cl/avalu_cgi/br/brc110.sh',
   });
-  
-  // Extraer solo las opciones del select de comunas
-  const options = [...r.body.matchAll(/<option[^>]*value="([^"]*)"[^>]*>([^<]+)</gi)]
-    .map(m => `${m[1]} = ${m[2].trim()}`)
-    .join('\n');
-  
-  res.status(200).send(`STATUS: ${r.status}\n\nCOMUNAS OPTIONS:\n${options}\n\nBODY SNIPPET:\n${r.body.slice(0, 2000)}`);
+
+  res.status(200).send(`URL: ${url}\nSTATUS: ${r.status}\n\nBODY (primeros 3000 chars):\n${r.body.slice(0, 3000)}`);
 };

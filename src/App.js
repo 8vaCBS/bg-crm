@@ -125,6 +125,7 @@ export default function App() {
         destino:       sii?.destino        || null,
         supTerreno:    sii?.supTerreno     || null,
         supConstruida: sii?.supConstruida  || null,
+        rangoSuperficie: sii?.rangoSuperficie || null,
         ubicacion:     sii?.ubicacion      || null,
         periodo:       sii?.periodo        || null,
         arriendoUF:    null,
@@ -375,6 +376,7 @@ export default function App() {
               <Row label="Ubicación"        value={selected.ubicacion} />
               <Row label="Sup. Terreno"     value={selected.supTerreno ? `${selected.supTerreno} m²` : null} />
               <Row label="Sup. Construida"  value={selected.supConstruida ? `${selected.supConstruida} m²` : null} />
+              <Row label="Rango sup. zona"  value={selected.rangoSuperficie ? `${selected.rangoSuperficie} m²` : null} />
               <Row label="Avalúo Total"     value={clp(selected.avaluoFiscal)} />
               <Row label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
               <Row label="Período"          value={selected.periodo} />

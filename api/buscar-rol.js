@@ -118,15 +118,6 @@ module.exports = async function handler(req, res) {
       }, baseHdrs
     );
 
-    let supTerreno = null;
-    let supConstruida = null;
-    try {
-      const j3 = JSON.parse(r3.body);
-      const servicios = j3?.data?.servicios || j3?.data || {};
-      supTerreno = servicios.supTerreno || d.supTerreno || null;
-      supConstruida = servicios.supConsMt2 || servicios.supConstruida || d.supConsMt2 || null;
-    } catch(e) {}
-
     // Paso 4: Obtener superficie desde getPredioPublicado
     let supTerreno = null;
     let supConstruida = null;

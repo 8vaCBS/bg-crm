@@ -219,68 +219,32 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // ── MODO B: Búsqueda por dirección con reintentos ─────────────────────
+    // ── MODO B: Búsqueda por dirección ─────────────────────────────────────
     if (!calle || !comuna) return res.status(400).json({ error: 'Faltan parametros' });
 
     const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
-
-    // Generar variantes de nombre de calle y número
-    const calleNorm = normalizar(calle.trim());
     const palabras = calle.trim().split(/\s+/);
-    const primero = palabras[0].toLowerCase();
 
-    const variantesCalle = [];
-    variantesCalle.push(calle.trim());
-
-    // Sin artículos intermedios (de, la, del, las, los)
-    const sinArticulos = palabras.filter(p => !['de','la','del','las','los','el','y'].includes(p.toLowerCase())).join(' ');
-    if (sinArticulos !== calle.trim()) variantesCalle.push(sinArticulos);
-
-    // Abreviaturas de nombres propios al inicio
-    const abreviaturas = {
-      'fernando': 'FDO', 'francisco': 'FCO', 'federico': 'FECO',
-      'general':  'GRAL', 'coronel': 'CNEL', 'doctor': 'DR',
-      'don':      'DN', 'almirante': 'ALM', 'capitan': 'CAP',
-      'avenida':  '', 'avda': '', 'av': '',
-    };
-    const abrev = abreviaturas[primero];
-    if (abrev !== undefined) {
-      const resto = palabras.slice(1).join(' ');
-      const restoSinArt = palabras.slice(1).filter(p => !['de','la','del','las','los','el'].includes(p.toLowerCase())).join(' ');
-      if (abrev) {
-        variantesCalle.push(abrev + ' ' + resto);
-        variantesCalle.push(abrev + '. ' + resto);
-        variantesCalle.push(abrev + ' ' + restoSinArt);
-      } else {
-        // Avenida/Av: probar sin el prefijo
-        variantesCalle.push(resto);
-      }
+    // Variantes de calle: solo las esenciales para no saturar el timeout
+    const variantesCalle = [calle.trim()];
+    // Solo para nombres con 4+ palabras: probar sin las últimas (ej: "de la Plata")
+    if (palabras.length >= 4) {
+      variantesCalle.push(palabras.slice(0, 2).join(' ')); // primeras 2 palabras
     }
 
-    // Truncar palabras: ir quitando la última palabra de a una
-    for (let i = palabras.length - 1; i >= 2; i--) {
-      variantesCalle.push(palabras.slice(0, i).join(' '));
-      // También la versión abreviada truncada
-      if (abrev && abrev !== '') {
-        variantesCalle.push(abrev + ' ' + palabras.slice(1, i).join(' '));
-      }
-    }
-
-    // Variantes de número: con y sin cero adelante
+    // Variantes de número: solo agregar cero si el número tiene 3 dígitos o menos
     const numerosVariantes = [numero || ''];
-    if (numero && !numero.startsWith('0') && numero.length <= 3) {
-      numerosVariantes.push('0' + numero); // agregar cero: 134 → 0134
+    if (numero && numero.length <= 3 && !numero.startsWith('0')) {
+      numerosVariantes.push('0' + numero); // 134 → 0134
     }
     if (numero && numero.startsWith('0')) {
-      numerosVariantes.push(numero.slice(1)); // quitar cero: 0134 → 134
+      numerosVariantes.push(numero.slice(1)); // 0134 → 134
     }
-
-    const variantesUnicas = [...new Set(variantesCalle)];
 
     let predios = [];
     let varianteUsada = calle;
 
-    for (const variante of variantesUnicas) {
+    for (const variante of variantesCalle) {
       for (const num of numerosVariantes) {
         const r1 = await fetchPost('www4.sii.cl',
           '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
@@ -291,10 +255,7 @@ module.exports = async function handler(req, res) {
         );
         const j1 = JSON.parse(r1.body);
         predios = j1?.data || [];
-        if (predios.length > 0) {
-          varianteUsada = variante;
-          break;
-        }
+        if (predios.length > 0) { varianteUsada = variante; break; }
       }
       if (predios.length > 0) break;
     }

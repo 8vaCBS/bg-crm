@@ -76,21 +76,6 @@ module.exports = async function handler(req, res) {
     'san ramon':         '15132',
   };
 
-  // Parsea el HTML de zeus.sii.cl para extraer datos del bien raiz
-  function parsearZeus(html) {
-    const result = {};
-    // Extraer numeros de tablas de avaluo (busca patrones de montos en CLP)
-    const montos = [...html.matchAll(/([\d]{1,3}(?:[.,][\d]{3})+)/g)].map(m => parseInt(m[1].replace(/[.,]/g, '')));
-    if (montos.length >= 1) result.avaluoFiscal = montos[0];
-    if (montos.length >= 2) result.avaluoAfecto = montos[1];
-    // ROL
-    const rolMatch = html.match(/(\d{3,4}-\d{1,3})/);
-    if (rolMatch) result.rol = rolMatch[1];
-    // Destino: buscar texto tipo CASA, DEPARTAMENTO, etc
-    const destMatch = html.match(/(CASA|DEPARTAMENTO|SITIO|OFICINA|PARCELA|BODEGA|LOCAL|COMERCIO|INDUSTRIA)/i);
-    if (destMatch) result.destino = destMatch[1].toUpperCase();
-    return result;
-  }
 
   const COMUNAS = {
     'nunoa': '15105', 'providencia': '15123', 'las condes': '15114',
@@ -146,36 +131,16 @@ module.exports = async function handler(req, res) {
       const j2 = JSON.parse(r2.body);
       const d = j2?.data || {};
 
-      // Si el mapa SII no retorna datos, intentar con zeus.sii.cl por ROL directo
       if (!d.rol) {
-        try {
-          const comunaNorm = normalizar(comuna || 'nunoa');
-          const zeusCode = ZEUS_COMUNA_CODES[comunaNorm] || '13120';
-          const zeusUrl = `https://zeus.sii.cl/avalu_cgi/br/brc110.sh?RGN=13&CNT=${zeusCode}&ROL=${rolDirecto}&BL_TIPO=ALL`;
-          console.log('[ZEUS] Consultando:', zeusUrl);
-          const zeusRes = await fetchGet(zeusUrl, {
-            'User-Agent': UA,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'es-419,es;q=0.9',
-            'Referer': 'https://zeus.sii.cl/avalu_cgi/br/brc110.sh',
-          });
-          console.log('[ZEUS] Status:', zeusRes.status, '| Body snippet:', zeusRes.body.slice(0, 400));
-          if (zeusRes.status === 200) {
-            const zeus = parsearZeus(zeusRes.body);
-            console.log('[ZEUS] Datos parseados:', JSON.stringify(zeus));
-            if (zeus.avaluoFiscal || zeus.rol) {
-              return res.status(200).json({
-                rol: zeus.rol || rolDirecto,
-                avaluoFiscal: zeus.avaluoFiscal || null,
-                avaluoAfecto: zeus.avaluoAfecto || null,
-                direccionSII: zeus.direccionSII || null,
-                destino: zeus.destino || null,
-                fuenteZeus: true,
-              });
-            }
-          }
-        } catch(eZeus) { console.log('[ZEUS] error:', eZeus.message); }
-        return res.status(200).json({ rol: null, error: 'ROL no encontrado en SII' });
+        // El mapa SII no encontró datos para este manzana/predio
+        // Retornar el ROL tal como fue ingresado + link al SII para consulta manual
+        const comunaNorm = normalizar(comuna || 'nunoa');
+        const zeusCode = ZEUS_COMUNA_CODES[comunaNorm] || '15105';
+        return res.status(200).json({
+          rol: rolDirecto,
+          rolSoloManual: true,
+          linkSII: `https://zeus.sii.cl/avalu_cgi/br/brc110.sh?RGN=13&CNT=${zeusCode}&ROL=${rolDirecto}&BL_TIPO=ALL`,
+        });
       }
 
       // Superficie desde mapa SII

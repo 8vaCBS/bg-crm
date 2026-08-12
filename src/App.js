@@ -168,14 +168,18 @@ export default function App() {
         if (data2?.rol) sii = data2;
       }
 
-      // Intento 3: usar el ROL como texto para guardarlo aunque no tengamos datos SII
-      if (!sii) {
-        // Guardar el ROL manualmente sin datos adicionales del SII
-        await updatePropiedad(propiedadId, { rol: rolInput });
+      // Intento 3: el SII retornó el ROL pero sin datos (rolSoloManual)
+      if (!sii || sii.rolSoloManual) {
+        const linkSII = sii?.linkSII || null;
+        await updatePropiedad(propiedadId, { 
+          rol: rolInput,
+          linkSII: linkSII || null,
+        });
         setLog(prev => prev.map((l, i) => i === logIdx ? { 
-          ...l, estado: 'warn', 
-          msg: `ROL ${rolInput} guardado manualmente (SII no retornó datos adicionales)`,
-          sinRol: false 
+          ...l, estado: 'warn',
+          msg: `ROL ${rolInput} guardado. El SII no expone avalúo por scraping para este predio.`,
+          linkSII,
+          sinRol: false,
         } : l));
         await load();
         return;
@@ -359,6 +363,12 @@ export default function App() {
                       {l.sinRol && l.propiedadId && (
                         <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna, l.texto)} />
                       )}
+                      {l.linkSII && (
+                        <a href={l.linkSII} target="_blank" rel="noopener noreferrer"
+                          style={{ display: 'inline-block', marginTop: 6, fontSize: 12, color: C.navy, fontWeight: 600 }}>
+                          Ver avalúo en SII →
+                        </a>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -493,6 +503,19 @@ export default function App() {
                   <FichaItem label="Período"          value={selected.periodo} />
                   <FichaItem label="Avalúo Total"     value={clp(selected.avaluoFiscal)} />
                   <FichaItem label="Avalúo Afecto"    value={clp(selected.avaluoAfecto)} />
+                  {selected.rol && !selected.avaluoFiscal && (
+                    <div style={{ gridColumn: '1 / -1', marginTop: 4 }}>
+                      <div style={S.fichaItemLabel}>Consulta SII</div>
+                      <a href={selected.linkSII || `https://zeus.sii.cl/avalu_cgi/br/brc110.sh`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 13, color: C.navy, fontWeight: 600 }}>
+                        Ver avalúo fiscal en SII (ROL {selected.rol}) →
+                      </a>
+                      <div style={{ fontSize: 11, color: C.textSm, marginTop: 3 }}>
+                        El avalúo de este predio requiere consulta directa en el SII
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

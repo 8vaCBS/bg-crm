@@ -135,7 +135,7 @@ export default function App() {
       }
       const { calle, numero, comuna, codigoComuna } = parsearDireccion(texto);
       setLog(prev => [...prev, { texto, estado: 'buscando', msg: 'Consultando SII...' }]);
-      const sii = await buscarEnSII(calle, numero, codigoComuna);
+      const sii = await buscarEnSII(calle, numero, comuna, texto);
 
       // Múltiples predios en la misma dirección — guardar y pedir al usuario que elija
       if (sii?.multiplesResultados) {

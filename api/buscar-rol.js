@@ -1,11 +1,43 @@
 
 const https = require('https');
+const COMUNAS_CHILE = require('./comunas-chile');
+
+// Mapa de palabras clave → región
+const KEYWORDS_REGION = {
+  rm: ['santiago','nunoa','providencia','las condes','vitacura','maipu','la florida','macul','penalolen','la reina','san miguel','lo barnechea','recoleta','independencia','estacion central','huechuraba','pudahuel','quilicura','conchali','renca','la cisterna','la granja','lo espejo','lo prado','san joaquin','san ramon','pedro aguirre cerda','cerrillos','el bosque','la pintana','san bernardo','puente alto','buin','colina','lampa','melipilla','talagante'],
+  valparaiso: ['valparaiso','vina del mar','quilpue','villa alemana','san antonio','quillota','san felipe','los andes','casablanca','concon','limache','olmue','cartagena','el quisco','algarrobo','vina'],
+  biobio: ['concepcion','talcahuano','chiguayante','hualpen','san pedro de la paz','coronel','lota','penco','tome','los angeles','chillan'],
+  araucania: ['temuco','padre las casas','villarrica','pucon','angol'],
+  loslagos: ['puerto montt','puerto varas','osorno','castro','ancud'],
+  coquimbo: ['la serena','coquimbo','ovalle','illapel'],
+  maule: ['talca','curico','linares','constitucion'],
+  ohiggins: ['rancagua','san fernando','pichilemu'],
+  antofagasta: ['antofagasta','calama','tocopilla'],
+  atacama: ['copiapo','vallenar'],
+  tarapaca: ['iquique','alto hospicio'],
+  arica: ['arica'],
+  losrios: ['valdivia','la union'],
+  aysen: ['coyhaique'],
+  magallanes: ['punta arenas'],
+};
+
+function detectarRegion(texto) {
+  const t = (texto||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  for (const [region, keywords] of Object.entries(KEYWORDS_REGION)) {
+    if (keywords.some(k => t.includes(k))) return region;
+  }
+  return null;
+}
+
+function getComunasParaRegion(region) {
+  return COMUNAS_CHILE[region] || COMUNAS_CHILE.rm;
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { calle, numero, comuna, rol: rolDirecto, manzana: manzanaElegida, predio: predioElegido } = req.query;
+  const { calle, numero, comuna, rol: rolDirecto, manzana: manzanaElegida, predio: predioElegido, textoOriginal } = req.query;
 
   function norm(str) {
     return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
@@ -192,10 +224,17 @@ module.exports = async function handler(req, res) {
     if (numero && numero.length <= 3 && !numero.startsWith('0')) numerosVariantes.push('0' + numero);
     if (numero && numero.startsWith('0')) numerosVariantes.push(numero.slice(1));
 
-    // Comunas a buscar: la dada o TODAS las de la RM
-    const comunasABuscar = comuna && COMUNAS[norm(comuna)]
-      ? [{ nombre: comuna.toUpperCase(), codigo: COMUNAS[norm(comuna)] }]
-      : COMUNAS_RM;
+    // Comunas a buscar: la dada, o las de la región detectada en el texto, o todas las de la RM
+    let comunasABuscar;
+    if (comuna && COMUNAS[norm(comuna)]) {
+      // Comuna explícita → buscar solo ahí
+      comunasABuscar = [{ nombre: comuna.toUpperCase(), codigo: COMUNAS[norm(comuna)] }];
+    } else {
+      // Sin comuna → detectar región por el texto completo de la dirección
+      const textoCompleto = textoOriginal || [calle, numero, comuna].filter(Boolean).join(' ');
+      const region = detectarRegion(textoCompleto);
+      comunasABuscar = getComunasParaRegion(region || 'rm');
+    }
 
     let prediosEncontrados = [];
     let comunaEncontrada = null;

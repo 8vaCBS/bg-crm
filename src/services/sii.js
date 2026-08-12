@@ -26,9 +26,14 @@ export function parsearDireccion(texto) {
   };
 }
 
-export async function buscarEnSII(calle, numero, comunaNombre) {
+export async function buscarEnSII(calle, numero, comunaNombre, textoOriginal) {
   try {
-    const params = new URLSearchParams({ calle, numero: numero || '', comuna: comunaNombre });
+    const params = new URLSearchParams({ 
+      calle, 
+      numero: numero || '', 
+      comuna: comunaNombre || '',
+      textoOriginal: textoOriginal || '',
+    });
     const res = await fetch(`/api/buscar-rol?${params}`);
     const data = await res.json();
     if (data.error && !data.rol) return null;

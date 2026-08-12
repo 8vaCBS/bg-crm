@@ -503,55 +503,129 @@ function DuenoEditor({ prop, onSave }) {
   const [email, setEmail] = useState(prop.duenoEmail || '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [procesando, setProcesando] = useState(false);
+  const [fotoUrl, setFotoUrl] = useState(prop.fotoUrl || null);
 
-  const guardar = async () => {
+  const guardar = async (datosExtra = {}) => {
     setSaving(true);
-    await onSave({ duenoNombre: nombre, duenoTelefono: telefono, duenoEmail: email });
+    await onSave({ duenoNombre: nombre, duenoTelefono: telefono, duenoEmail: email, ...datosExtra });
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const subirEquifax = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setProcesando(true);
+    try {
+      // Leer PDF como base64
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Enviar a API
+      const res = await fetch('/api/procesar-equifax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pdfBase64: b64 })
+      });
+      const datos = await res.json();
+
+      if (datos.error) throw new Error(datos.error);
+
+      // Llenar campos automáticamente
+      if (datos.propietario) setNombre(datos.propietario);
+      if (datos.telefonos?.length) setTelefono(datos.telefonos[0]);
+      if (datos.emails?.length) setEmail(datos.emails[0]);
+
+      // Guardar datos extras en Firebase
+      const extra = {};
+      if (datos.telefonos?.length > 1) extra.duenoTelefonos = datos.telefonos;
+      if (datos.emails?.length > 1) extra.duenoEmails = datos.emails;
+      if (datos.superficieConstruida) extra.supConstruida = datos.superficieConstruida;
+      if (datos.rut) extra.duenoRut = datos.rut;
+      if (datos.sociedades?.length) extra.duenoSociedades = datos.sociedades.join(', ');
+
+      await onSave({
+        duenoNombre: datos.propietario || nombre,
+        duenoTelefono: datos.telefonos?.[0] || telefono,
+        duenoEmail: datos.emails?.[0] || email,
+        ...extra
+      });
+
+      alert(`✅ Datos extraídos:
+👤 ${datos.propietario || 'N/D'}
+📱 ${datos.telefonos?.join(', ') || 'N/D'}
+✉️ ${datos.emails?.join(', ') || 'N/D'}${datos.superficieConstruida ? `
+📐 ${datos.superficieConstruida} m²` : ''}`);
+    } catch(err) {
+      alert('Error procesando PDF: ' + err.message);
+    } finally {
+      setProcesando(false);
+    }
+  };
+
+  const subirFoto = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const b64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      setFotoUrl(b64);
+      await onSave({ fotoUrl: b64 });
+    } catch(err) {
+      alert('Error subiendo foto: ' + err.message);
+    }
+  };
+
   return (
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #F3F4F6' }}>
+
+      {/* Foto de la propiedad */}
+      {fotoUrl && (
+        <img src={fotoUrl} alt="Propiedad" style={{ width: '100%', borderRadius: 10, marginBottom: 12, maxHeight: 200, objectFit: 'cover' }} />
+      )}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', border: '1.5px dashed #E5E7EB', borderRadius: 8, fontSize: 12, color: '#6B7280', cursor: 'pointer', background: '#FAFAFA' }}>
+          📄 {procesando ? 'Procesando...' : 'Subir Equifax (PDF)'}
+          <input type="file" accept=".pdf" onChange={subirEquifax} style={{ display: 'none' }} disabled={procesando} />
+        </label>
+        <label style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px', border: '1.5px dashed #E5E7EB', borderRadius: 8, fontSize: 12, color: '#6B7280', cursor: 'pointer', background: '#FAFAFA' }}>
+          📸 Foto propiedad
+          <input type="file" accept="image/*" onChange={subirFoto} style={{ display: 'none' }} />
+        </label>
+      </div>
+
       <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10, fontWeight: 600 }}>DATOS DEL PROPIETARIO</div>
-      
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div>
           <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 3 }}>Nombre</div>
-          <input
-            type="text"
-            value={nombre}
-            onChange={e => setNombre(e.target.value)}
+          <input type="text" value={nombre} onChange={e => setNombre(e.target.value)}
             placeholder="Nombre completo del dueño"
-            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-          />
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
         </div>
         <div>
           <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 3 }}>Teléfono</div>
-          <input
-            type="tel"
-            value={telefono}
-            onChange={e => setTelefono(e.target.value)}
+          <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)}
             placeholder="+56 9 XXXX XXXX"
-            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-          />
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
         </div>
         <div>
           <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 3 }}>Email</div>
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
             placeholder="correo@ejemplo.com"
-            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }}
-          />
+            style={{ width: '100%', padding: '8px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 14, boxSizing: 'border-box' }} />
         </div>
-        <button
-          onClick={guardar}
-          disabled={saving}
-          style={{ padding: '10px', background: saving ? '#9CA3AF' : '#1E3A5F', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}
-        >
+        <button onClick={() => guardar()} disabled={saving}
+          style={{ padding: '10px', background: saving ? '#9CA3AF' : '#1E3A5F', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', marginTop: 4 }}>
           {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar datos del propietario'}
         </button>
       </div>
@@ -559,8 +633,10 @@ function DuenoEditor({ prop, onSave }) {
       {(prop.duenoNombre || prop.duenoTelefono || prop.duenoEmail) && (
         <div style={{ marginTop: 10, padding: '10px 12px', background: '#EFF6FF', borderRadius: 8, fontSize: 12 }}>
           {prop.duenoNombre && <div>👤 <strong>{prop.duenoNombre}</strong></div>}
-          {prop.duenoTelefono && <div style={{ marginTop: 3 }}>📱 {prop.duenoTelefono}</div>}
-          {prop.duenoEmail && <div style={{ marginTop: 3 }}>✉️ {prop.duenoEmail}</div>}
+          {prop.duenoRut && <div style={{ marginTop: 2 }}>🪪 {prop.duenoRut}</div>}
+          {prop.duenoTelefono && <div style={{ marginTop: 2 }}>📱 {prop.duenoTelefono}</div>}
+          {prop.duenoEmail && <div style={{ marginTop: 2 }}>✉️ {prop.duenoEmail}</div>}
+          {prop.duenoSociedades && <div style={{ marginTop: 2, fontSize: 11, color: '#6B7280' }}>🏢 {prop.duenoSociedades}</div>}
         </div>
       )}
     </div>

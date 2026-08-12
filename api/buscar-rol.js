@@ -56,7 +56,7 @@ module.exports = async function handler(req, res) {
     'la florida':        '15106',
     'maipu':             '15109',
     'san miguel':        '15113',
-    'penalolen':         '15112',
+    'penalolen':         '15122',
     'lo barnechea':      '15116',
     'huechuraba':        '15117',
     'independencia':     '15118',
@@ -79,7 +79,7 @@ module.exports = async function handler(req, res) {
 
   const COMUNAS = {
     'nunoa': '15105', 'providencia': '15123', 'las condes': '15114',
-    'penalolen': '15121', 'santiago': '15101', 'vitacura': '15132',
+    'penalolen': '15122', 'santiago': '15101', 'vitacura': '15132',
     'la reina': '15113', 'macul': '15118', 'san miguel': '15126',
     'la florida': '15110', 'maipu': '15119', 'huechuraba': '15108',
     'independencia': '15109', 'recoleta': '15125', 'lo barnechea': '15116',
@@ -226,11 +226,24 @@ module.exports = async function handler(req, res) {
     const codigoComuna = COMUNAS[normalizar(comuna)] || '15105';
     const palabras = calle.trim().split(/\s+/);
 
-    // Variantes de calle: solo las esenciales para no saturar el timeout
-    const variantesCalle = [calle.trim()];
-    // Solo para nombres con 4+ palabras: probar sin las últimas (ej: "de la Plata")
-    if (palabras.length >= 4) {
-      variantesCalle.push(palabras.slice(0, 2).join(' ')); // primeras 2 palabras
+    // Limpiar calle: sin prefijos de vía, sin tildes, en mayúsculas (lo que el SII tiene)
+    const calleLimpia = calle.trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/^(AVENIDA|AVDA|AV\.?|CALLE|PASAJE|PSJE|POBLACION|CAMINO|RUTA)\s+/, '')
+      .trim();
+    const calleMayus = calle.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+
+    // Variantes en orden: primero lo que el SII tiene, luego fallbacks
+    const variantesCalle = [...new Set([
+      calleLimpia,   // QUILIN SUR (sin Avenida, sin tildes)
+      calleMayus,    // AVENIDA QUILIN SUR
+      calle.trim(),  // original del usuario
+    ])];
+    // Si la versión limpia tiene 3+ palabras, probar también las primeras 2
+    const palabrasLimpias = calleLimpia.split(/\s+/);
+    if (palabrasLimpias.length >= 3) {
+      variantesCalle.push(palabrasLimpias.slice(0, 2).join(' '));
     }
 
     // Variantes de número: solo agregar cero si el número tiene 3 dígitos o menos

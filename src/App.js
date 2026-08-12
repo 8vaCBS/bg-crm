@@ -537,11 +537,6 @@ function DuenoEditor({ prop, onSave }) {
 
       if (datos.error) throw new Error(datos.error);
 
-      // Llenar campos automáticamente
-      if (datos.propietario) setNombre(datos.propietario);
-      if (datos.telefonos?.length) setTelefono(datos.telefonos[0]);
-      if (datos.emails?.length) setEmail(datos.emails[0]);
-
       // Guardar datos extras en Firebase
       const extra = {};
       if (datos.telefonos?.length > 1) extra.duenoTelefonos = datos.telefonos;
@@ -550,6 +545,11 @@ function DuenoEditor({ prop, onSave }) {
       if (datos.rut) extra.duenoRut = datos.rut;
       if (datos.sociedades?.length) extra.duenoSociedades = datos.sociedades.join(', ');
 
+      // Actualizar estados locales
+      if (datos.propietario) setNombre(datos.propietario);
+      if (datos.telefonos?.[0]) setTelefono(datos.telefonos[0]);
+      if (datos.emails?.[0]) setEmail(datos.emails[0]);
+      
       await onSave({
         duenoNombre: datos.propietario || nombre,
         duenoTelefono: datos.telefonos?.[0] || telefono,

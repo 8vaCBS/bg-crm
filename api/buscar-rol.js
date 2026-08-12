@@ -157,14 +157,18 @@ module.exports = async function handler(req, res) {
         }, H
       );
       const d = JSON.parse(r2.body)?.data || {};
-      if (!d.rol) return null;
+      // Si no hay datos en absoluto, retornar null
+      const tieneAlgunDato = d.rol || d.valorTotal || d.valorAfecto || d.destinoDescripcion || d.direccion;
+      if (!tieneAlgunDato) return null;
+      // Construir ROL desde manzana-predio si el campo rol viene vacío
+      const rolResultante = d.rol || `${manzana}-${predioNum}`;
       const { supTerreno, supConstruida } = await getSuperficie(d.predioPublicado?.id, H);
       return {
-        rol: d.rol, manzana, predio: predioNum,
-        avaluoFiscal:    d.valorTotal || null,
-        avaluoAfecto:    d.valorAfecto || null,
+        rol: rolResultante, manzana, predio: predioNum,
+        avaluoFiscal:    d.valorTotal  || d.avaluoFiscal  || null,
+        avaluoAfecto:    d.valorAfecto || d.avaluoAfecto  || null,
         direccionSII:    (d.direccion || '').trim(),
-        destino:         d.destinoDescripcion || null,
+        destino:         d.destinoDescripcion || d.destino || null,
         ubicacion:       d.ubicacion || null,
         supTerreno, supConstruida,
         rangoSuperficie: d.datosAh?.rangoSuperficie?.trim() || null,

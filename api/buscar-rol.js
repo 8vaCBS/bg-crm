@@ -232,12 +232,15 @@ module.exports = async function handler(req, res) {
     if (numeroValido && numeroValido.startsWith('0')) {
       numerosVariantes.push(numeroValido.slice(1));     // 0134 → 134
     }
-    // Variante de número de matriz: para condominios el SII tiene el loteo macro
-    // Ej: 10691 → 10600 (entrada del condominio, número de la manzana original)
-    if (numeroValido && numeroValido.length > 3) {
-      const numeroMatriz = numeroValido.substring(0, 3) + '00';
-      if (!numerosVariantes.includes(numeroMatriz)) {
-        numerosVariantes.push(numeroMatriz);
+    // Variante de número de matriz: redondeo a la centena inferior
+    // 10691 → 10600 | 1450 → 1400 | 328 → 300
+    if (numeroValido && numeroValido.length >= 3) {
+      const numInt = parseInt(numeroValido, 10);
+      if (!isNaN(numInt)) {
+        const numeroMatriz = String(numInt - (numInt % 100));
+        if (!numerosVariantes.includes(numeroMatriz) && numeroMatriz !== numeroValido) {
+          numerosVariantes.push(numeroMatriz);
+        }
       }
     }
 

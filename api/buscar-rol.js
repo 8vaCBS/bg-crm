@@ -246,10 +246,11 @@ module.exports = async function handler(req, res) {
       numerosVariantes.push(numero.slice(1)); // 0134 → 134
     }
 
+    const variantesUnicas = [...new Set(variantesCalle)];
     let predios = [];
     let varianteUsada = calle;
 
-    for (const variante of variantesCalle) {
+    for (const variante of variantesUnicas) {
       for (const num of numerosVariantes) {
         const r1 = await fetchPost('www4.sii.cl',
           '/mapasui/services/data/mapasFacadeService/getPrediosDireccion',
@@ -260,6 +261,7 @@ module.exports = async function handler(req, res) {
         );
         const j1 = JSON.parse(r1.body);
         predios = j1?.data || [];
+        console.log(`[SII] variante="${variante}" num="${num}" → ${predios.length} predios`);
         if (predios.length > 0) { varianteUsada = variante; break; }
       }
       if (predios.length > 0) break;

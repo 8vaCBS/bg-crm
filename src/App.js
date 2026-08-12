@@ -145,17 +145,42 @@ export default function App() {
     setInput(''); setProc(false); await load();
   };
 
-  const buscarPorRol = async (logIdx, propiedadId, rolInput, comuna) => {
-    if (!rolInput.match(/^\d+-\d+$/)) {
-      alert('Formato incorrecto. Usa MANZANA-PREDIO, ej: 387-21');
-      return;
-    }
-    setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'buscando', msg: 'Consultando por ROL...' } : l));
+  const buscarPorRol = async (logIdx, propiedadId, rolInput, comuna, direccion) => {
+    setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'buscando', msg: 'Consultando SII...' } : l));
     try {
-      const params = new URLSearchParams({ rol: rolInput, comuna });
-      const res = await fetch(`/api/buscar-rol?${params}`);
-      const sii = await res.json();
-      if (!sii?.rol) throw new Error('ROL no encontrado en SII');
+      let sii = null;
+
+      // Intento 1: buscar por manzana-predio si viene en ese formato
+      if (rolInput.match(/^\d+-\d+$/)) {
+        const params = new URLSearchParams({ rol: rolInput, comuna });
+        const res = await fetch(`/api/buscar-rol?${params}`);
+        const data = await res.json();
+        if (data?.rol) sii = data;
+      }
+
+      // Intento 2: si falló o tiene formato distinto, re-buscar por dirección
+      // con variantes adicionales (FDO, sin artículos, etc.)
+      if (!sii && direccion) {
+        const { calle, numero, codigoComuna } = parsearDireccion(direccion + ', ' + comuna);
+        const params2 = new URLSearchParams({ calle, numero: numero || '', comuna });
+        const res2 = await fetch(`/api/buscar-rol?${params2}`);
+        const data2 = await res2.json();
+        if (data2?.rol) sii = data2;
+      }
+
+      // Intento 3: usar el ROL como texto para guardarlo aunque no tengamos datos SII
+      if (!sii) {
+        // Guardar el ROL manualmente sin datos adicionales del SII
+        await updatePropiedad(propiedadId, { rol: rolInput });
+        setLog(prev => prev.map((l, i) => i === logIdx ? { 
+          ...l, estado: 'warn', 
+          msg: `ROL ${rolInput} guardado manualmente (SII no retornó datos adicionales)`,
+          sinRol: false 
+        } : l));
+        await load();
+        return;
+      }
+
       await updatePropiedad(propiedadId, {
         rol: sii.rol,
         avaluoFiscal: sii.avaluoFiscal || null,
@@ -168,7 +193,7 @@ export default function App() {
         ubicacion: sii.ubicacion || null,
         periodo: sii.periodo || null,
       });
-      setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'ok', msg: `ROL ${sii.rol} encontrado`, sinRol: false } : l));
+      setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'ok', msg: `ROL ${sii.rol} — datos SII actualizados`, sinRol: false } : l));
       await load();
     } catch(e) {
       setLog(prev => prev.map((l, i) => i === logIdx ? { ...l, estado: 'error', msg: 'Error: ' + e.message } : l));
@@ -332,7 +357,7 @@ export default function App() {
                       <div style={{ fontWeight: 600, fontSize: 13, color: C.text }}>{l.texto}</div>
                       <div style={{ fontSize: 12, color: C.textMd, marginTop: 2 }}>{l.msg}</div>
                       {l.sinRol && l.propiedadId && (
-                        <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna)} />
+                        <RolManualInput onBuscar={(rol) => buscarPorRol(i, l.propiedadId, rol, l.comuna, l.texto)} />
                       )}
                     </div>
                   </div>
@@ -729,7 +754,7 @@ function RolManualInput({ onBuscar }) {
     <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'center' }}>
       <input
         style={{ flex: 1, padding: '6px 10px', border: `1px solid ${C.gold}`, borderRadius: 7, fontSize: 12, outline: 'none', color: C.text }}
-        placeholder="ROL manual, ej: 387-21"
+        placeholder="ROL Propiteq, ej: 387-21"
         value={rol}
         onChange={e => setRol(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && rol && onBuscar(rol)}

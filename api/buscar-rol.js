@@ -139,6 +139,7 @@ module.exports = async function handler(req, res) {
       supConstruida: (d.supConsMt2 && d.supConsMt2 > 0) ? d.supConsMt2 : null,
       coordenadas: d.ubicacionX ? { lat: d.ubicacionX, lng: d.ubicacionY } : null,
       areaHomogenea: d.ah || null,
+      rawD: JSON.stringify(d).substring(0, 1000),
       periodo: d.periodo || null,
       manzana,
       predio: predioNum,
